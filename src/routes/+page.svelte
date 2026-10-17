@@ -50,7 +50,7 @@
 		{:else}
 			<p>Club <strong>{app.club}</strong> niet gevonden.</p>
 		{/if}
-	{:else if app.trimmed}
+	{:else if app.trimmed && app.view !== 'ranglijst'}
 		<SearchView />
 	{:else if app.view === 'clubs'}
 		<ClubsView />
@@ -64,8 +64,8 @@
 <footer class="wrap">
 	Bron: <a href={meta.source} rel="noopener" target="_blank">KNKV – {meta.title}</a>, opgehaald op
 	{new Date(meta.updated).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}.
-	Geen officiële KNKV-app; controleer bij twijfel de bron. Labels als “eindbaas”, “underdog” en “zware poule”
-	zijn afgeleid van de indelingspunten.
+	Geen officiële KNKV-app; controleer bij twijfel de bron. Labels als “eindbaas”, “underdog”, “zware poule” en
+	“gelijkwaardig” zijn afgeleid van de indelingspunten.
 </footer>
 
 <style>

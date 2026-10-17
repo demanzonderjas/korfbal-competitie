@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { DAYS, LABEL_GAP, homeClub, type Poule, type Team } from '../indeling';
+	import { DAYS, homeClub, rankedTeamCount, type Poule, type Team } from '../indeling';
+	import { shareLink } from '../share';
 	import { app } from '../state.svelte';
 
 	let {
@@ -21,11 +22,24 @@
 			? ''
 			: n.toLocaleString('nl-NL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 
+	function labelTitle(team: Team) {
+		return team.label === 'eindbaas'
+			? `${team.gap} punten voorsprong op de nummer 2 — een van de duidelijkste in ${poule.section}`
+			: `${team.gap} punten achter op de op één na laagste — een van de grootste in ${poule.section}`;
+	}
 
-	const LABELS = {
-		eindbaas: { text: 'Eindbaas', title: `Minstens ${LABEL_GAP} punten meer dan de nummer 2 in deze poule` },
-		underdog: { text: 'Underdog', title: `Minstens ${LABEL_GAP} punten minder dan de op één na laagste in deze poule` }
-	};
+	function pointsTitle(team: Team) {
+		if (team.overallRank == null) return 'Punten';
+		return `#${team.overallRank} van ${fmt(rankedTeamCount.get(poule.category) ?? 0)} in de hele ${poule.category}`;
+	}
+
+	const clubNames = (teams: Team[]) => [...new Set(teams.map((t) => homeClub(t).name))].join(' – ');
+
+	let copied = $state(false);
+	async function share() {
+		copied = await shareLink(`?poule=${encodeURIComponent(poule.code)}`, `Poule ${poule.code}`);
+		if (copied) setTimeout(() => (copied = false), 1500);
+	}
 </script>
 
 <article class="card" class:tough={poule.stats?.tough} id="poule-{poule.code}">
@@ -50,11 +64,36 @@
 				title="Gemiddeld {fmt(poule.stats.avg, 1)} punten · #{poule.stats.rank} van {poule.stats
 					.of} poules in {poule.section}"
 			>
-				{#if poule.stats.tough}<span class="tough-badge">Zware poule</span>{/if}
 				<span class="avg">Ø {fmt(poule.stats.avg)}</span>
 			</div>
 		{/if}
+		<button type="button" class="share no-print" onclick={share} aria-label="Deel poule {poule.code}" title="Deel deze poule">
+			{#if copied}<span class="copied">Gekopieerd</span>{:else}<svg viewBox="0 0 24 24" aria-hidden="true"
+					><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13" /></svg
+				>{/if}
+		</button>
 	</header>
+
+	{#if poule.stats?.tough || poule.stats?.tight || poule.derbies.length || poule.internal.length}
+		<div class="badges">
+			{#if poule.stats?.tough}
+				<span class="b hot" title="#{poule.stats.rank} van {poule.stats.of} op gemiddelde punten in {poule.section}"
+					>Zware poule</span
+				>
+			{/if}
+			{#if poule.stats?.tight}
+				<span class="b tight" title="Slechts {poule.stats.spread} punten verschil tussen de hoogste en laagste"
+					>Gelijkwaardig</span
+				>
+			{/if}
+			{#each poule.derbies as teams (teams[0])}
+				<span class="b derby" title={clubNames(teams)}>Derby {teams[0].place}</span>
+			{/each}
+			{#each poule.internal as teams (teams[0])}
+				<span class="b internal" title={teams.map((t) => t.name).join(' – ')}>Onderling {homeClub(teams[0]).name}</span>
+			{/each}
+		</div>
+	{/if}
 
 	<table>
 		{#if hasStats}
@@ -78,8 +117,8 @@
 							{team.name}
 						</button>
 						{#if team.label}
-							<span class="label {team.label}" title={LABELS[team.label].title}
-								>{LABELS[team.label].text}</span
+							<span class="label {team.label}" title={labelTitle(team)}
+								>{team.label === 'eindbaas' ? 'Eindbaas' : 'Underdog'}</span
 							>
 						{/if}
 						{#if team.place}<span class="place">{team.place}</span>{/if}
@@ -91,7 +130,7 @@
 					{/if}
 					{#if hasStats}
 						<td class="num">{fmt(team.age, 1)}</td>
-						<td class="num pts">{fmt(team.points)}</td>
+						<td class="num pts" title={pointsTitle(team)}>{fmt(team.points)}</td>
 					{/if}
 				</tr>
 			{/each}
@@ -157,15 +196,65 @@
 		color: var(--text-2);
 		font-variant-numeric: tabular-nums;
 	}
-	.tough-badge {
+	.share {
+		align-self: center;
+		flex: none;
+		border: 0;
+		background: none;
+		color: var(--text-3);
+		padding: 0.15rem;
+		margin: -0.15rem -0.3rem -0.15rem 0;
+		border-radius: 6px;
+		cursor: pointer;
+		line-height: 0;
+	}
+	.share:hover {
+		color: var(--accent-strong);
+		background: var(--chip);
+	}
+	.share svg {
+		width: 17px;
+		height: 17px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+	.copied {
+		font-size: 0.72rem;
+		line-height: 1.4;
+		color: var(--accent-strong);
+	}
+
+	.badges {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		padding: 0.5rem 1rem;
+		border-bottom: 1px solid var(--border-soft);
+	}
+	.b {
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
 		padding: 0.1rem 0.45rem;
 		border-radius: 6px;
+		cursor: help;
+	}
+	.b.hot {
 		background: var(--hot);
 		color: var(--on-hot);
+	}
+	.b.tight {
+		background: var(--tight);
+		color: var(--on-tight);
+	}
+	.b.derby,
+	.b.internal {
+		background: var(--chip);
+		color: var(--text-2);
 	}
 
 	table {

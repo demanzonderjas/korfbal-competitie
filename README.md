@@ -5,15 +5,17 @@ All data is bundled into the app as static JSON, so there is no database or API.
 
 ## Features
 
-- **Search** for a team, club, place or poule code, with every matching poule shown in full.
+- **Search** for a team, club, place or poule code. Poules with matching teams come in team order (club, then 1, 2, 3, …, then youth).
 - **Indeling:** browse by category and class. B-categorie classes can be sorted with the toughest poules first.
-- **Clubs:** pick a club to see an overview of all its teams and their poules, with category and day filters and a print button. Star it as *Mijn club* to keep it on the start page.
-- **Ranglijst:** B-categorie teams ranked by indelingspunten, with a minimum-points slider, plus poules ranked by average points.
-- **Labels:**
-  - *Eindbaas*: at least 7 points more than the number 2 in its poule.
-  - *Underdog*: at least 7 points fewer than the second-lowest team in its poule.
-  - *Zware poule*: in the top 10% of its class by average points.
-- Every view has a shareable URL, for example `?club=Fortuna` or `?poule=R2A`.
+- **Clubs:** pick a club to see all its teams, seniors first (1, 2, 3, …), then midweek, youth and G-korfbal. Each team shows its poule, its position in the poule and its rank in the whole B-categorie. Filter by category or day, share or print the page, and star it as *Mijn club*.
+- **Ranglijst:** B-categorie teams ranked by indelingspunten (per class or all of them), and poules ranked by average points.
+  - The search box filters the list by team, club or place.
+  - Filters: minimum points, eindbazen/underdogs, zware/gelijkwaardige poules. Active filters show as chips, each removable on its own.
+- **Labels,** derived from the points and relative to each class, because point scales differ a lot between levels:
+  - *Eindbaas* / *Underdog*: the top / bottom team of a poule, with one of the clearest gaps to its neighbour in its class. The gap is the smallest of at least 3 points that at most 15% of poules reach.
+  - *Zware poule* / *Gelijkwaardig*: the 10% of poules per class with the highest average or the smallest spread.
+  - *Derby* (clubs from the same town) and *Onderling* (two teams of the same club) in one poule.
+- Every view has a shareable URL, for example `?club=MIA`, `?poule=R2A` or `?v=ranglijst&q=MIA`.
 
 ## Development
 

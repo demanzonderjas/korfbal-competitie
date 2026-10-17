@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { LABEL_GAP, clubByName, homeClub, type Poule, type Team, type TeamLabel } from '../indeling';
+	import { clubByName, homeClub, normalize, rankedTeamCount, type Poule, type Team } from '../indeling';
 	import { ALL_SECTIONS, app, rankedCategories } from '../state.svelte';
 
 	const PAGE_SIZE = 100;
@@ -7,13 +7,14 @@
 		n.toLocaleString('nl-NL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 
 	let limit = $state(PAGE_SIZE);
-	let label = $state<TeamLabel | null>(null);
 	$effect(() => {
 		app.rankCategory;
 		app.rankSection;
 		app.mode;
 		app.min;
-		label;
+		app.trimmed;
+		app.label;
+		app.kind;
 		limit = PAGE_SIZE;
 	});
 
@@ -51,10 +52,31 @@
 	const hi = $derived(values.length ? Math.ceil(Math.max(...values)) : 0);
 	const min = $derived(app.min == null ? lo : Math.min(Math.max(app.min, lo), hi));
 
+	// The header search filters the ranking on team, club or place; ranks stay the unfiltered positions.
+	const words = $derived(normalize(app.trimmed).split(/\s+/).filter(Boolean));
+	const teamMatches = (t: Team) =>
+		words.every((w) => t.haystack.includes(w) || normalize(homeClub(t).name).includes(w));
+	const pouleMatches = (p: Poule) =>
+		p.teams.some(teamMatches) || words.every((w) => p.code.toLowerCase().includes(w));
+
 	const teams = $derived(
-		rankedTeams.filter((r) => r.item.points! >= min && (!label || r.item.label === label))
+		rankedTeams.filter(
+			(r) =>
+				r.item.points! >= min && (!app.label || r.item.label === app.label) && (!words.length || teamMatches(r.item))
+		)
 	);
-	const poules = $derived(rankedPoules.filter((r) => r.item.stats!.avg >= min));
+	const poules = $derived(
+		rankedPoules.filter(
+			(r) =>
+				r.item.stats!.avg >= min &&
+				(app.kind !== 'zwaar' || r.item.stats!.tough) &&
+				(app.kind !== 'gelijkwaardig' || r.item.stats!.tight) &&
+				(!words.length || pouleMatches(r.item))
+		)
+	);
+	const highlight = $derived(
+		words.length ? new Set(rankedTeams.map((r) => r.item).filter(teamMatches)) : new Set<Team>()
+	);
 
 	const myClub = $derived(app.myClub ? clubByName.get(app.myClub.toLowerCase()) : undefined);
 	const myTeams = $derived(new Set(myClub?.teams.map((t) => t.team) ?? []));
@@ -64,6 +86,44 @@
 	const avgLo = $derived(rankedPoules.length ? rankedPoules[rankedPoules.length - 1].item.stats!.avg : 0);
 	const avgHi = $derived(rankedPoules.length ? rankedPoules[0].item.stats!.avg : 1);
 	const pct = (v: number) => (avgHi === avgLo ? 100 : 8 + (92 * (v - avgLo)) / (avgHi - avgLo));
+
+	// Everything that narrows the list, each removable on its own.
+	const activeFilters = $derived(
+		[
+			words.length && { key: 'q', text: `“${app.trimmed}”`, clear: () => (app.query = '') },
+			app.min != null && {
+				key: 'min',
+				text: `${app.mode === 'teams' ? 'Min.' : 'Min. gem.'} ${min} punten`,
+				clear: () => (app.min = null)
+			},
+			app.mode === 'teams' &&
+				app.label && {
+					key: 'label',
+					text: app.label === 'eindbaas' ? 'Eindbazen' : 'Underdogs',
+					clear: () => (app.label = null)
+				},
+			app.mode === 'poules' &&
+				app.kind && {
+					key: 'kind',
+					text: app.kind === 'zwaar' ? 'Zware poules' : 'Gelijkwaardige poules',
+					clear: () => (app.kind = null)
+				}
+		].filter((f) => !!f) as { key: string; text: string; clear: () => void }[]
+	);
+
+	function update(change: () => void) {
+		change();
+		app.replace();
+	}
+
+	function clearAll() {
+		update(() => {
+			app.query = '';
+			app.min = null;
+			app.label = null;
+			app.kind = null;
+		});
+	}
 
 	let sliderTimer: ReturnType<typeof setTimeout>;
 	function onSlide(e: Event) {
@@ -135,18 +195,50 @@
 	</label>
 	{#if app.mode === 'teams'}
 		<div class="seg" role="group" aria-label="Label">
-			<button type="button" class:on={!label} onclick={() => (label = null)}>Alle teams</button>
-			<button type="button" class:on={label === 'eindbaas'} onclick={() => (label = 'eindbaas')}>Eindbazen</button>
-			<button type="button" class:on={label === 'underdog'} onclick={() => (label = 'underdog')}>Underdogs</button>
+			<button type="button" class:on={!app.label} onclick={() => update(() => (app.label = null))}>Alle teams</button>
+			<button type="button" class:on={app.label === 'eindbaas'} onclick={() => update(() => (app.label = 'eindbaas'))}
+				>Eindbazen</button
+			>
+			<button type="button" class:on={app.label === 'underdog'} onclick={() => update(() => (app.label = 'underdog'))}
+				>Underdogs</button
+			>
+		</div>
+	{:else}
+		<div class="seg" role="group" aria-label="Soort poule">
+			<button type="button" class:on={!app.kind} onclick={() => update(() => (app.kind = null))}>Alle poules</button>
+			<button type="button" class:on={app.kind === 'zwaar'} onclick={() => update(() => (app.kind = 'zwaar'))}>Zwaar</button>
+			<button type="button" class:on={app.kind === 'gelijkwaardig'} onclick={() => update(() => (app.kind = 'gelijkwaardig'))}
+				>Gelijkwaardig</button
+			>
 		</div>
 	{/if}
 </div>
 
+{#if activeFilters.length}
+	<div class="active" aria-label="Actieve filters">
+		<span class="muted">Actieve filters:</span>
+		{#each activeFilters as f (f.key)}
+			<button type="button" class="filter-chip" onclick={() => update(f.clear)} aria-label="Verwijder filter {f.text}">
+				{f.text} <span aria-hidden="true">×</span>
+			</button>
+		{/each}
+		<button type="button" class="link" onclick={clearAll}>Wis alle filters</button>
+	</div>
+{/if}
+
 {#if app.mode === 'teams'}
 	<p class="summary">
 		<strong>{nl(teams.length)}</strong> van {nl(rankedTeams.length)} teams
-		{#if label === 'eindbaas'}— minstens {LABEL_GAP} punten meer dan de nummer 2 in hun poule{/if}
-		{#if label === 'underdog'}— minstens {LABEL_GAP} punten minder dan de op één na laagste in hun poule{/if}
+		{#if app.label === 'eindbaas'}
+			— {app.rankSection?.labelGaps
+				? `minstens ${app.rankSection.labelGaps.eindbaas} punten meer dan de nummer 2 in hun poule`
+				: 'met een van de duidelijkste voorsprongen in hun klasse'}
+		{/if}
+		{#if app.label === 'underdog'}
+			— {app.rankSection?.labelGaps
+				? `minstens ${app.rankSection.labelGaps.underdog} punten minder dan de op één na laagste in hun poule`
+				: 'met een van de grootste achterstanden in hun klasse'}
+		{/if}
 	</p>
 	<div class="table">
 		<table>
@@ -156,13 +248,18 @@
 					<th>Team</th>
 					<th>Poule</th>
 					<th class="num hide-sm" title="Gemiddelde leeftijd">Lftd</th>
+					{#if app.rankSection}
+						<th class="num" title="Plek in de hele {app.rankCategory.name} ({nl(rankedTeamCount.get(app.rankCategory.name) ?? 0)} teams)"
+							>Totaal</th
+						>
+					{/if}
 					<th class="num">Punt</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each teams.slice(0, limit) as { item: t, rank } (t)}
 					{@const club = homeClub(t).name}
-					<tr class:mine={myTeams.has(t)}>
+					<tr class:mine={!words.length && myTeams.has(t)}>
 						<td class="rank">{rank}</td>
 						<td>
 							<button type="button" class="name" onclick={() => app.openClub(club)}>{t.name}</button>
@@ -174,6 +271,9 @@
 							<span class="sub">{t.pointsRank}e van {t.poule.teams.filter((x) => x.points != null).length}{#if !app.rankSection} · {t.poule.section}{/if}</span>
 						</td>
 						<td class="num hide-sm">{t.age != null ? nl(t.age, 1) : ''}</td>
+						{#if app.rankSection}
+							<td class="num muted">#{t.overallRank}</td>
+						{/if}
 						<td class="num pts">{t.points}</td>
 					</tr>
 				{/each}
@@ -188,7 +288,7 @@
 {:else}
 	<p class="summary">
 		<strong>{nl(poules.length)}</strong> van {nl(rankedPoules.length)} poules, gesorteerd op gemiddelde
-		punten. De zwaarste 10% per klasse zijn gemarkeerd.
+		punten. Per klasse zijn de 10% zwaarste en de 10% meest gelijkwaardige (kleinste spreiding) gemarkeerd.
 	</p>
 	<div class="table">
 		<table>
@@ -205,13 +305,15 @@
 				{#each poules.slice(0, limit) as { item: p, rank } (p)}
 					{@const s = p.stats!}
 					{@const boss = p.teams.find((t) => t.label === 'eindbaas')}
-					<tr class:mine={myPoules.has(p)}>
+					{@const hits = words.length ? p.teams.filter((t) => highlight.has(t)) : []}
+					<tr class:mine={words.length ? hits.length > 0 : myPoules.has(p)}>
 						<td class="rank">{rank}</td>
 						<td>
 							<button type="button" class="link code" onclick={() => app.openPoule(p.code)}>{p.code}</button>
 							{#if s.tough}<span class="tough">Zwaar</span>{/if}
+							{#if s.tight}<span class="tough tight">Gelijkwaardig</span>{/if}
 							<span class="sub"
-								>{p.teams.length} teams{#if !app.rankSection} · {p.section}{/if}{#if boss} · eindbaas: {boss.name}{/if}</span
+								>{#if hits.length}{hits.map((t) => t.name).join(', ')}{:else}{p.teams.length} teams{/if}{#if !app.rankSection} · {p.section}{/if}{#if boss} · eindbaas: {boss.name}{/if}</span
 							>
 						</td>
 						<td class="bar-col">
@@ -373,6 +475,46 @@
 	.tough {
 		background: var(--hot);
 		color: var(--on-hot);
+	}
+	.tough.tight {
+		background: var(--tight);
+		color: var(--on-tight);
+	}
+	.active {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem 0.5rem;
+		margin: 0 0 0.8rem;
+		padding: 0.55rem 0.8rem;
+		border-radius: 12px;
+		background: var(--hit);
+		border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+		font-size: 0.88rem;
+	}
+	.filter-chip {
+		font: inherit;
+		font-weight: 600;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		border: 1px solid var(--accent);
+		background: var(--surface);
+		color: var(--text);
+		cursor: pointer;
+	}
+	.filter-chip span {
+		color: var(--accent-strong);
+		font-size: 1.05em;
+		line-height: 1;
+	}
+	.filter-chip:hover {
+		background: var(--chip);
+	}
+	.active .link {
+		margin-left: auto;
 	}
 
 	.bar-col {

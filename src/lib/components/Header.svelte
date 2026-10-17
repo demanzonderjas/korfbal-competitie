@@ -10,15 +10,19 @@
 		{ view: 'ranglijst', label: 'Ranglijst' }
 	];
 
+	// In the ranking the search box filters the list; everywhere else it opens search results.
+	const filtersRanking = $derived(app.view === 'ranglijst' && !app.poule && !app.club);
 	const activeTab = $derived<View | null>(
-		app.trimmed && !app.poule && !app.club ? null : app.club ? 'clubs' : app.view
+		app.club ? 'clubs' : app.trimmed && !app.poule && !filtersRanking ? null : app.view
 	);
-	const showChips = $derived(!app.poule && !app.club && (app.trimmed || app.view === 'indeling'));
+	const showChips = $derived(
+		!app.poule && !app.club && !filtersRanking && (app.trimmed || app.view === 'indeling')
+	);
 
 	function onInput() {
+		if (!filtersRanking) app.section = null;
 		app.poule = null;
 		app.club = null;
-		app.section = null;
 		app.replace();
 	}
 
@@ -89,7 +93,7 @@
 				oninput={onInput}
 				onkeydown={(e) => e.key === 'Escape' && app.query && clear()}
 				type="search"
-				placeholder="Zoek op team, club, plaats of poule…"
+				placeholder={filtersRanking ? 'Filter de ranglijst op team, club of plaats…' : 'Zoek op team, club, plaats of poule…'}
 				autocomplete="off"
 				spellcheck="false"
 				enterkeyhint="search"

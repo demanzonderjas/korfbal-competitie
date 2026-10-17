@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { DAYS, type Club, type Poule, type Team } from '../indeling';
-	import { app } from '../state.svelte';
+	import { DAYS, rankedTeamCount, teamGroup, type Club, type Poule, type Team } from '../indeling';
+	import { shareLink } from '../share';
+	import { ALL_SECTIONS, app } from '../state.svelte';
 	import PouleCard from './PouleCard.svelte';
 
 	let { club }: { club: Club } = $props();
@@ -22,15 +23,17 @@
 	);
 	const highlight = $derived(new Set<Team>(club.teams.map((t) => t.team)));
 
-	// One card per poule (two teams of a club can share a poule), grouped by category.
+	// One card per poule (two teams of a club can share a poule), in team order: Senioren (1, 2, 3, …),
+	// Midweek, Jeugd, G-korfbal.
 	const groups = $derived.by(() => {
-		const out: { category: string; poules: Poule[] }[] = [];
+		const out: { name: string; poules: Poule[] }[] = [];
 		const seen = new Set<Poule>();
-		for (const { poule } of visible) {
+		for (const { team, poule } of visible) {
 			if (seen.has(poule)) continue;
 			seen.add(poule);
-			let g = out.find((x) => x.category === poule.category);
-			if (!g) out.push((g = { category: poule.category, poules: [] }));
+			const name = teamGroup(team);
+			let g = out.find((x) => x.name === name);
+			if (!g) out.push((g = { name, poules: [] }));
 			g.poules.push(poule);
 		}
 		return out;
@@ -40,8 +43,27 @@
 		poules: new Set(club.teams.map((t) => t.poule)).size,
 		bosses: club.teams.filter((t) => t.team.label === 'eindbaas').length,
 		underdogs: club.teams.filter((t) => t.team.label === 'underdog').length,
-		tough: club.teams.filter((t) => t.poule.stats?.tough).length
+		tough: club.teams.filter((t) => t.poule.stats?.tough).length,
+		derbies: new Set(club.teams.filter((t) => t.poule.derbies.some((d) => d.includes(t.team))).map((t) => t.poule)).size,
+		ranked: club.teams.some((t) => t.team.overallRank != null)
 	});
+
+	let copied = $state(false);
+	async function share() {
+		copied = await shareLink(`?club=${encodeURIComponent(club.name)}`, club.name);
+		if (copied) setTimeout(() => (copied = false), 1500);
+	}
+
+	function openRanking() {
+		// Read the name first: resetting closes this club view, after which the prop is gone.
+		const name = club.name;
+		app.go(() => {
+			app.reset();
+			app.view = 'ranglijst';
+			app.section = ALL_SECTIONS;
+			app.query = name;
+		});
+	}
 
 	const isMine = $derived(app.myClub === club.name);
 
@@ -63,6 +85,10 @@
 		<button type="button" class="btn" class:on={isMine} onclick={() => app.setMyClub(isMine ? null : club.name)}>
 			{isMine ? '★ Mijn club' : '☆ Maak mijn club'}
 		</button>
+		{#if stats.ranked}
+			<button type="button" class="btn" onclick={openRanking}>In ranglijst</button>
+		{/if}
+		<button type="button" class="btn" onclick={share}>{copied ? 'Link gekopieerd' : 'Delen'}</button>
 		<button type="button" class="btn" onclick={() => window.print()}>Afdrukken</button>
 	</div>
 </div>
@@ -83,6 +109,11 @@
 	{#if stats.tough}
 		<div title="Teams in een van de zwaarste poules van hun klasse">
 			<strong class="hot">{stats.tough}</strong><span>in zware poule</span>
+		</div>
+	{/if}
+	{#if stats.derbies}
+		<div title="Poules met een andere club uit dezelfde plaats">
+			<strong>{stats.derbies}</strong><span>{stats.derbies === 1 ? 'derby' : "derby's"}</span>
 		</div>
 	{/if}
 </div>
@@ -117,6 +148,9 @@
 				<th class="hide-sm">Klasse</th>
 				<th>Dag</th>
 				<th class="num" title="Plek op punten binnen de poule (alleen B-categorie)">Pos.</th>
+				{#if stats.ranked}
+					<th class="num" title="Plek op punten in de hele B-categorie">Rang</th>
+				{/if}
 			</tr>
 		</thead>
 		<tbody>
@@ -135,15 +169,20 @@
 					<td class="num">
 						{#if team.pointsRank}{team.pointsRank}/{poule.teams.filter((t) => t.points != null).length}{:else}<span class="muted">–</span>{/if}
 					</td>
+					{#if stats.ranked}
+						<td class="num" title={team.overallRank ? `van ${rankedTeamCount.get(poule.category)?.toLocaleString('nl-NL')} in ${poule.category}` : ''}>
+							{#if team.overallRank}#{team.overallRank}{:else}<span class="muted">–</span>{/if}
+						</td>
+					{/if}
 				</tr>
 			{/each}
 		</tbody>
 	</table>
 </div>
 
-{#each groups as g (g.category)}
+{#each groups as g (g.name)}
 	<section>
-		<h2>{g.category}</h2>
+		<h2>{g.name}</h2>
 		<div class="grid">
 			{#each g.poules as p (p.code)}
 				<PouleCard poule={p} {highlight} />
@@ -169,6 +208,7 @@
 	}
 	.actions {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.5rem;
 	}
 	.btn.on {

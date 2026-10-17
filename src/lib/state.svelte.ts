@@ -1,10 +1,11 @@
 import { tick } from 'svelte';
 import { pushState, replaceState } from '$app/navigation';
-import { categories, clubByName, normalize } from './indeling';
+import { categories, clubByName, normalize, type TeamLabel } from './indeling';
 
 export type View = 'indeling' | 'clubs' | 'ranglijst';
 export type RankMode = 'teams' | 'poules';
 export type SortMode = 'code' | 'zwaar';
+export type PouleKind = 'zwaar' | 'gelijkwaardig';
 
 const MY_CLUB_KEY = 'mijn-club';
 export const ALL_SECTIONS = 'alle';
@@ -21,6 +22,7 @@ export const rankedCategories = categories.filter((c) => c.sections.some((s) => 
 /**
  * All view state lives here and is mirrored in the URL, so every screen can be shared or bookmarked.
  * What is shown is decided in order: ?poule, ?club, ?q, then ?v (indeling / clubs / ranglijst).
+ * In the ranking, ?q filters the list instead of opening search results.
  */
 class AppState {
 	view = $state<View>('indeling');
@@ -31,6 +33,9 @@ class AppState {
 	club = $state<string | null>(null);
 	mode = $state<RankMode>('teams');
 	min = $state<number | null>(null);
+	/** Ranking filters: only eindbazen/underdogs (teams), or only tough/even poules (poules). */
+	label = $state<TeamLabel | null>(null);
+	kind = $state<PouleKind | null>(null);
 	sort = $state<SortMode>('code');
 	myClub = $state<string | null>(null);
 
@@ -54,7 +59,7 @@ class AppState {
 		const p = new URLSearchParams();
 		if (this.poule) p.set('poule', this.poule);
 		else if (this.club) p.set('club', this.club);
-		else if (this.trimmed) {
+		else if (this.trimmed && this.view !== 'ranglijst') {
 			p.set('q', this.trimmed);
 			if (this.category) p.set('cat', slug(this.category));
 		} else {
@@ -62,7 +67,10 @@ class AppState {
 			if (this.category) p.set('cat', slug(this.category));
 			if (this.section) p.set('sectie', slug(this.section));
 			if (this.view === 'ranglijst') {
+				if (this.trimmed) p.set('q', this.trimmed);
 				if (this.mode !== 'teams') p.set('mode', this.mode);
+				if (this.mode === 'teams' && this.label) p.set('label', this.label);
+				if (this.mode === 'poules' && this.kind) p.set('soort', this.kind);
 				if (this.min != null) p.set('min', String(this.min));
 			}
 			if (this.view === 'indeling' && this.sort !== 'code') p.set('sort', this.sort);
@@ -86,6 +94,10 @@ class AppState {
 		this.poule = p.get('poule');
 		this.club = p.get('club');
 		this.mode = p.get('mode') === 'poules' ? 'poules' : 'teams';
+		const label = p.get('label');
+		this.label = label === 'eindbaas' || label === 'underdog' ? label : null;
+		const kind = p.get('soort');
+		this.kind = kind === 'zwaar' || kind === 'gelijkwaardig' ? kind : null;
 		const min = Number(p.get('min'));
 		this.min = p.has('min') && Number.isFinite(min) ? min : null;
 		this.sort = p.get('sort') === 'zwaar' ? 'zwaar' : 'code';
@@ -113,13 +125,20 @@ class AppState {
 		this.club = null;
 		this.mode = 'teams';
 		this.min = null;
+		this.label = null;
+		this.kind = null;
 		this.sort = 'code';
 	}
 
 	openView(view: View) {
 		return this.go(() => {
+			// The ranking keeps the current search, or the open club, as its filter.
+			const fromClub = view === 'ranglijst' ? this.club : null;
+			const filter = view === 'ranglijst' ? (fromClub ?? this.trimmed) : '';
 			this.reset();
 			this.view = view;
+			this.query = filter;
+			if (fromClub) this.section = ALL_SECTIONS;
 		});
 	}
 

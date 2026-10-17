@@ -17,6 +17,8 @@
 	--on-boss: #ffffff;
 	--dog: #1f7a6a;
 	--on-dog: #ffffff;
+	--tight: #2d6fb8;
+	--on-tight: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -39,6 +41,8 @@
 		--on-boss: #170d2e;
 		--dog: #4cc2ab;
 		--on-dog: #04201b;
+		--tight: #6aa8ec;
+		--on-tight: #06172b;
 	}
 }
 
