@@ -1,0 +1,405 @@
+<script lang="ts">
+	import { LABEL_GAP, clubByName, homeClub, type Poule, type Team, type TeamLabel } from '../indeling';
+	import { ALL_SECTIONS, app, rankedCategories } from '../state.svelte';
+
+	const PAGE_SIZE = 100;
+	const nl = (n: number, decimals = 0) =>
+		n.toLocaleString('nl-NL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+
+	let limit = $state(PAGE_SIZE);
+	let label = $state<TeamLabel | null>(null);
+	$effect(() => {
+		app.rankCategory;
+		app.rankSection;
+		app.mode;
+		app.min;
+		label;
+		limit = PAGE_SIZE;
+	});
+
+	const sectionsWithStats = $derived(app.rankCategory.sections.filter((s) => s.hasStats));
+	const scope = $derived(app.rankSection ? [app.rankSection] : sectionsWithStats);
+
+	/** Competition ranking (1, 2, 2, 4) on a descending value. */
+	function ranked<T>(items: T[], value: (x: T) => number) {
+		const sorted = [...items].sort((a, b) => value(b) - value(a));
+		let rank = 0;
+		return sorted.map((item, i) => {
+			if (i === 0 || value(item) !== value(sorted[i - 1])) rank = i + 1;
+			return { item, rank };
+		});
+	}
+
+	const rankedTeams = $derived(
+		ranked(
+			scope.flatMap((s) => s.poules.flatMap((p) => p.teams.filter((t) => t.points != null))),
+			(t: Team) => t.points!
+		)
+	);
+	const rankedPoules = $derived(
+		ranked(
+			scope.flatMap((s) => s.poules.filter((p) => p.stats)),
+			(p: Poule) => p.stats!.avg
+		)
+	);
+
+	// The slider spans the values in the current scope.
+	const values = $derived(
+		app.mode === 'teams' ? rankedTeams.map((r) => r.item.points!) : rankedPoules.map((r) => r.item.stats!.avg)
+	);
+	const lo = $derived(values.length ? Math.floor(Math.min(...values)) : 0);
+	const hi = $derived(values.length ? Math.ceil(Math.max(...values)) : 0);
+	const min = $derived(app.min == null ? lo : Math.min(Math.max(app.min, lo), hi));
+
+	const teams = $derived(
+		rankedTeams.filter((r) => r.item.points! >= min && (!label || r.item.label === label))
+	);
+	const poules = $derived(rankedPoules.filter((r) => r.item.stats!.avg >= min));
+
+	const myClub = $derived(app.myClub ? clubByName.get(app.myClub.toLowerCase()) : undefined);
+	const myTeams = $derived(new Set(myClub?.teams.map((t) => t.team) ?? []));
+	const myPoules = $derived(new Set(myClub?.teams.map((t) => t.poule) ?? []));
+
+	// Section-wide range of poule averages, for the strength bars.
+	const avgLo = $derived(rankedPoules.length ? rankedPoules[rankedPoules.length - 1].item.stats!.avg : 0);
+	const avgHi = $derived(rankedPoules.length ? rankedPoules[0].item.stats!.avg : 1);
+	const pct = (v: number) => (avgHi === avgLo ? 100 : 8 + (92 * (v - avgLo)) / (avgHi - avgLo));
+
+	let sliderTimer: ReturnType<typeof setTimeout>;
+	function onSlide(e: Event) {
+		const v = Number((e.target as HTMLInputElement).value);
+		app.min = v <= lo ? null : v;
+		clearTimeout(sliderTimer);
+		sliderTimer = setTimeout(() => app.replace(), 250);
+	}
+</script>
+
+<div class="head">
+	<h1>Ranglijst</h1>
+	<p class="intro">
+		Teams en poules in de B-categorie op indelingspunten. Hoe hoger, hoe sterker. Punten zijn per klasse
+		het best te vergelijken.
+	</p>
+</div>
+
+<div class="controls">
+	{#if rankedCategories.length > 1}
+		<div class="seg" role="group" aria-label="Categorie">
+			{#each rankedCategories as c (c.name)}
+				<button
+					type="button"
+					class:on={app.rankCategory === c}
+					onclick={() =>
+						app.go(() => {
+							app.category = c.name;
+							app.section = null;
+							app.min = null;
+						})}>{c.name}</button
+				>
+			{/each}
+		</div>
+	{/if}
+
+	<label class="select">
+		<span class="sr">Klasse</span>
+		<select
+			value={app.rankSection?.name ?? ALL_SECTIONS}
+			onchange={(e) =>
+				app.go(() => {
+					app.category = app.rankCategory.name;
+					app.section = (e.target as HTMLSelectElement).value;
+					app.min = null;
+				})}
+		>
+			{#each sectionsWithStats as s (s.name)}
+				<option value={s.name}>{s.name}</option>
+			{/each}
+			<option value={ALL_SECTIONS}>Alle klassen</option>
+		</select>
+	</label>
+
+	<div class="seg" role="group" aria-label="Weergave">
+		<button type="button" class:on={app.mode === 'teams'} onclick={() => app.go(() => ((app.mode = 'teams'), (app.min = null)))}
+			>Sterkste teams</button
+		>
+		<button type="button" class:on={app.mode === 'poules'} onclick={() => app.go(() => ((app.mode = 'poules'), (app.min = null)))}
+			>Zwaarste poules</button
+		>
+	</div>
+</div>
+
+<div class="controls">
+	<label class="slider">
+		<span>{app.mode === 'teams' ? 'Min. punten' : 'Min. gemiddelde'} <strong>{min}</strong></span>
+		<input type="range" min={lo} max={hi} step="1" value={min} oninput={onSlide} />
+	</label>
+	{#if app.mode === 'teams'}
+		<div class="seg" role="group" aria-label="Label">
+			<button type="button" class:on={!label} onclick={() => (label = null)}>Alle teams</button>
+			<button type="button" class:on={label === 'eindbaas'} onclick={() => (label = 'eindbaas')}>Eindbazen</button>
+			<button type="button" class:on={label === 'underdog'} onclick={() => (label = 'underdog')}>Underdogs</button>
+		</div>
+	{/if}
+</div>
+
+{#if app.mode === 'teams'}
+	<p class="summary">
+		<strong>{nl(teams.length)}</strong> van {nl(rankedTeams.length)} teams
+		{#if label === 'eindbaas'}— minstens {LABEL_GAP} punten meer dan de nummer 2 in hun poule{/if}
+		{#if label === 'underdog'}— minstens {LABEL_GAP} punten minder dan de op één na laagste in hun poule{/if}
+	</p>
+	<div class="table">
+		<table>
+			<thead>
+				<tr>
+					<th class="rank">#</th>
+					<th>Team</th>
+					<th>Poule</th>
+					<th class="num hide-sm" title="Gemiddelde leeftijd">Lftd</th>
+					<th class="num">Punt</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each teams.slice(0, limit) as { item: t, rank } (t)}
+					{@const club = homeClub(t).name}
+					<tr class:mine={myTeams.has(t)}>
+						<td class="rank">{rank}</td>
+						<td>
+							<button type="button" class="name" onclick={() => app.openClub(club)}>{t.name}</button>
+							{#if t.label}<span class="label {t.label}">{t.label === 'eindbaas' ? 'Eindbaas' : 'Underdog'}</span>{/if}
+							<span class="sub">{t.place ?? ''}</span>
+						</td>
+						<td>
+							<button type="button" class="link code" onclick={() => app.openPoule(t.poule.code)}>{t.poule.code}</button>
+							<span class="sub">{t.pointsRank}e van {t.poule.teams.filter((x) => x.points != null).length}{#if !app.rankSection} · {t.poule.section}{/if}</span>
+						</td>
+						<td class="num hide-sm">{t.age != null ? nl(t.age, 1) : ''}</td>
+						<td class="num pts">{t.points}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+	{#if teams.length > limit}
+		<button type="button" class="btn more" onclick={() => (limit += PAGE_SIZE)}>
+			Toon meer ({nl(teams.length - limit)} resterend)
+		</button>
+	{/if}
+{:else}
+	<p class="summary">
+		<strong>{nl(poules.length)}</strong> van {nl(rankedPoules.length)} poules, gesorteerd op gemiddelde
+		punten. De zwaarste 10% per klasse zijn gemarkeerd.
+	</p>
+	<div class="table">
+		<table>
+			<thead>
+				<tr>
+					<th class="rank">#</th>
+					<th>Poule</th>
+					<th class="bar-col">Sterkte</th>
+					<th class="num hide-sm" title="Laagste – hoogste punten">Spreiding</th>
+					<th class="num">Ø</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each poules.slice(0, limit) as { item: p, rank } (p)}
+					{@const s = p.stats!}
+					{@const boss = p.teams.find((t) => t.label === 'eindbaas')}
+					<tr class:mine={myPoules.has(p)}>
+						<td class="rank">{rank}</td>
+						<td>
+							<button type="button" class="link code" onclick={() => app.openPoule(p.code)}>{p.code}</button>
+							{#if s.tough}<span class="tough">Zwaar</span>{/if}
+							<span class="sub"
+								>{p.teams.length} teams{#if !app.rankSection} · {p.section}{/if}{#if boss} · eindbaas: {boss.name}{/if}</span
+							>
+						</td>
+						<td class="bar-col">
+							<div class="bar" aria-hidden="true">
+								<div class="fill" class:hot={s.tough} style="width: {pct(s.avg)}%"></div>
+							</div>
+						</td>
+						<td class="num hide-sm muted">{s.min}–{s.max}</td>
+						<td class="num pts">{nl(s.avg, 1)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+	{#if poules.length > limit}
+		<button type="button" class="btn more" onclick={() => (limit += PAGE_SIZE)}>
+			Toon meer ({nl(poules.length - limit)} resterend)
+		</button>
+	{/if}
+{/if}
+
+<style>
+	h1 {
+		font-size: 1.25rem;
+		margin: 0 0 0.25rem;
+	}
+	.controls {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.6rem 0.9rem;
+		margin-bottom: 0.8rem;
+	}
+	.controls .seg {
+		max-width: 100%;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	.controls .seg button {
+		white-space: nowrap;
+	}
+	select {
+		font: inherit;
+		font-size: 0.9rem;
+		padding: 0.4rem 0.6rem;
+		border-radius: 10px;
+		border: 1px solid var(--border);
+		background: var(--surface);
+		color: var(--text);
+		max-width: 100%;
+	}
+	.slider {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		font-size: 0.9rem;
+		color: var(--text-2);
+	}
+	.slider strong {
+		display: inline-block;
+		min-width: 2.2em;
+		color: var(--text);
+		font-variant-numeric: tabular-nums;
+	}
+	.slider input {
+		width: min(260px, 50vw);
+		accent-color: var(--accent);
+	}
+
+	.table {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		overflow: hidden;
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.92rem;
+	}
+	th {
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-3);
+		text-align: left;
+		padding: 0.6rem 0.5rem 0.3rem;
+	}
+	td {
+		padding: 0.45rem 0.5rem;
+		border-top: 1px solid var(--border-soft);
+		vertical-align: top;
+	}
+	th:first-child,
+	td:first-child {
+		padding-left: 1rem;
+	}
+	th:last-child,
+	td:last-child {
+		padding-right: 1rem;
+	}
+	tr.mine td {
+		background: var(--hit);
+	}
+
+	.rank {
+		width: 2.8rem;
+		color: var(--text-3);
+		font-variant-numeric: tabular-nums;
+	}
+	.name {
+		all: unset;
+		font-weight: 500;
+		color: var(--text);
+		cursor: pointer;
+	}
+	button.name:hover {
+		color: var(--accent-strong);
+		text-decoration: underline;
+	}
+	.sub {
+		display: block;
+		font-size: 0.8rem;
+		color: var(--text-3);
+	}
+	.code {
+		font-weight: 600;
+	}
+	.num {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.pts {
+		font-weight: 700;
+	}
+
+	.label,
+	.tough {
+		display: inline-block;
+		margin-left: 0.35rem;
+		font-size: 0.66rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		padding: 0.02rem 0.38rem;
+		border-radius: 5px;
+		vertical-align: 0.1em;
+	}
+	.label.eindbaas {
+		background: var(--boss);
+		color: var(--on-boss);
+	}
+	.label.underdog {
+		background: var(--dog);
+		color: var(--on-dog);
+	}
+	.tough {
+		background: var(--hot);
+		color: var(--on-hot);
+	}
+
+	.bar-col {
+		width: 30%;
+		vertical-align: middle;
+	}
+	.bar {
+		height: 8px;
+		border-radius: 4px;
+		background: var(--chip);
+		overflow: hidden;
+	}
+	.fill {
+		height: 100%;
+		border-radius: 4px;
+		background: var(--accent);
+	}
+	.fill.hot {
+		background: var(--hot);
+	}
+
+	@media (max-width: 560px) {
+		.hide-sm {
+			display: none;
+		}
+		.bar-col {
+			width: 22%;
+		}
+	}
+</style>

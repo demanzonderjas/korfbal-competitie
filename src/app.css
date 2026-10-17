@@ -1,0 +1,209 @@
+:root {
+	--bg: #f6f5f2;
+	--surface: #ffffff;
+	--border: #e3e0d9;
+	--border-soft: #efede8;
+	--text: #1c1b19;
+	--text-2: #4a4843;
+	--text-3: #7a776f;
+	--accent: #e8611a;
+	--accent-strong: #c24d0e;
+	--on-accent: #ffffff;
+	--chip: #f0eee9;
+	--hit: #fdeee3;
+	--hot: #c62f2f;
+	--on-hot: #ffffff;
+	--boss: #6d3fc8;
+	--on-boss: #ffffff;
+	--dog: #1f7a6a;
+	--on-dog: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #151413;
+		--surface: #1e1d1b;
+		--border: #33312d;
+		--border-soft: #2a2825;
+		--text: #f1efea;
+		--text-2: #c9c6be;
+		--text-3: #8f8b82;
+		--accent: #f07a38;
+		--accent-strong: #ff9a5e;
+		--on-accent: #1c1006;
+		--chip: #2c2a27;
+		--hit: #3a2416;
+		--hot: #e25555;
+		--on-hot: #1a0606;
+		--boss: #a98bf0;
+		--on-boss: #170d2e;
+		--dog: #4cc2ab;
+		--on-dog: #04201b;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family:
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		Roboto,
+		sans-serif;
+	line-height: 1.45;
+}
+
+@media print {
+	.no-print {
+		display: none !important;
+	}
+	body {
+		background: #fff;
+	}
+}
+
+/* Shared building blocks used by the views. */
+.wrap {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 0 16px;
+}
+
+.sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+}
+
+.link {
+	all: unset;
+	cursor: pointer;
+	color: var(--accent-strong);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+.link:focus-visible {
+	outline: 2px solid var(--accent);
+}
+
+.grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+	gap: 1rem;
+	align-items: start;
+}
+@media (max-width: 400px) {
+	.grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+.tiles {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 0.6rem;
+}
+.tile {
+	text-align: left;
+	font: inherit;
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	padding: 0.75rem 0.9rem;
+	border-radius: 12px;
+	border: 1px solid var(--border);
+	background: var(--surface);
+	color: var(--text);
+	cursor: pointer;
+	transition: border-color 0.15s;
+}
+.tile:hover {
+	border-color: var(--accent);
+}
+.tile > span {
+	font-size: 0.82rem;
+	color: var(--text-3);
+}
+
+.crumbs {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.5rem;
+	margin-bottom: 1rem;
+	color: var(--text-3);
+}
+.crumbs h1 {
+	font-size: 1.25rem;
+	margin: 0;
+	color: var(--text);
+}
+.crumbs .count {
+	font-size: 0.85rem;
+}
+
+.btn {
+	font: inherit;
+	font-size: 0.9rem;
+	border: 1px solid var(--border);
+	background: var(--surface);
+	color: var(--text-2);
+	border-radius: 8px;
+	padding: 0.35rem 0.75rem;
+	cursor: pointer;
+}
+.btn:hover {
+	border-color: var(--accent);
+}
+.btn.more {
+	display: block;
+	margin: 1.5rem auto 0;
+	padding: 0.6rem 1.2rem;
+	color: var(--text);
+}
+
+/* Segmented control. */
+.seg {
+	display: inline-flex;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 2px;
+	background: var(--surface);
+}
+.seg button {
+	font: inherit;
+	font-size: 0.85rem;
+	border: 0;
+	background: none;
+	color: var(--text-2);
+	padding: 0.3rem 0.75rem;
+	border-radius: 8px;
+	cursor: pointer;
+}
+.seg button.on {
+	background: var(--accent);
+	color: var(--on-accent);
+	font-weight: 600;
+}
+
+.muted {
+	color: var(--text-3);
+}
+
+.summary,
+.intro {
+	color: var(--text-2);
+	margin: 0 0 1rem;
+}
