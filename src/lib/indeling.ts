@@ -1,7 +1,7 @@
 import raw from './data/indeling.json';
 
-/** The same team in the previous indeling: section, poule, points, and name/category when they differ. */
-type RawPrevious = [string, string, number | null, string | null, string | null];
+/** The same team in the previous indeling: section, poule, points, name/category when they differ, age. */
+type RawPrevious = [string, string, number | null, string | null, string | null, number | null];
 type RawTeam = [number, string, string | null, number | null, number | null, string | null, RawPrevious | null];
 type RawData = {
 	title: string;
@@ -47,9 +47,18 @@ export type Team = {
 	previous: PreviousTeam | null;
 	/** Points now minus points in the previous indeling, when both are known. */
 	delta: number | null;
+	/** Average age now minus in the previous indeling, when both are known. */
+	ageDelta: number | null;
 };
 
-export type PreviousTeam = { section: string; code: string; points: number | null; name: string; category: string };
+export type PreviousTeam = {
+	section: string;
+	code: string;
+	points: number | null;
+	name: string;
+	category: string;
+	age: number | null;
+};
 
 export type PouleStats = {
 	avg: number;
@@ -75,6 +84,8 @@ export type Poule = {
 	derbies: Team[][];
 	/** Two or more teams of the same club in this poule. */
 	internal: Team[][];
+	/** Average of the teams' average ages (B-categorie only). */
+	avgAge: number | null;
 };
 
 export type Section = {
@@ -142,7 +153,8 @@ export const categories: Category[] = data.categories.map((c) => ({
 					haystack: wordHaystack(`${p.code} ${s.name} ${c.name}`),
 					teams: [],
 					derbies: [],
-					internal: []
+					internal: [],
+					avgAge: null
 				};
 				poule.teams = p.teams.map(([nr, name, day, age, points, place, prev]) => ({
 					nr,
@@ -163,9 +175,12 @@ export const categories: Category[] = data.categories.map((c) => ({
 						code: prev[1],
 						points: prev[2],
 						name: prev[3] ?? name,
-						category: prev[4] ?? c.name
+						category: prev[4] ?? c.name,
+						age: prev[5]
 					},
-					delta: prev && points != null && prev[2] != null ? points - prev[2] : null
+					delta: prev && points != null && prev[2] != null ? points - prev[2] : null,
+					// Rounded to one decimal, like the ages themselves, to avoid float noise.
+					ageDelta: prev && age != null && prev[5] != null ? Math.round((age - prev[5]) * 10) / 10 : null
 				}));
 				return poule;
 			})
@@ -328,6 +343,11 @@ export const clubByName = new Map(clubs.map((c) => [c.name.toLowerCase(), c]));
 
 /** The club a team is listed under first (combination teams also appear under their partner clubs). */
 export const homeClub = (team: Team): Club => clubByName.get(clubParts(team)[0].toLowerCase())!;
+
+for (const poule of poules) {
+	const ages = poule.teams.map((t) => t.age).filter((a) => a != null);
+	if (ages.length) poule.avgAge = ages.reduce((a, b) => a + b, 0) / ages.length;
+}
 
 // Derbies (different clubs from the same town) and club-internal duels, per poule.
 for (const poule of poules) {

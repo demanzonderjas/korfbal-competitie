@@ -46,6 +46,7 @@
 		tough: club.teams.filter((t) => t.poule.stats?.tough).length,
 		derbies: new Set(club.teams.filter((t) => t.poule.derbies.some((d) => d.includes(t.team))).map((t) => t.poule)).size,
 		ranked: club.teams.some((t) => t.team.overallRank != null),
+		aged: club.teams.some((t) => t.team.age != null),
 		deltas: club.teams.map((t) => t.team.delta).filter((d) => d != null),
 		newTeams: club.teams.filter((t) => !t.team.previous).length
 	});
@@ -175,6 +176,7 @@
 				<th>Poule</th>
 				<th class="hide-sm">Klasse</th>
 				<th>Dag</th>
+				{#if stats.aged}<th class="num hide-sm" title="Gemiddelde leeftijd (alleen B-categorie)">Lftd</th>{/if}
 				<th class="num hide-sm" title="Plek op punten binnen de poule (alleen B-categorie)">Pos.</th>
 				{#if stats.ranked}
 					<th class="num" title="Plek op punten in de hele B-categorie">Rang</th>
@@ -196,6 +198,14 @@
 					</td>
 					<td class="hide-sm muted">{poule.section}</td>
 					<td><span title={team.day ? DAYS[team.day] : ''}>{team.day ?? '–'}</span></td>
+					{#if stats.aged}
+						<td
+							class="num hide-sm"
+							title={team.previous?.age != null ? `${previousLabel}: ${team.previous.age.toLocaleString('nl-NL')} jaar` : ''}
+						>
+							{#if team.age != null}{team.age.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}{:else}<span class="muted">–</span>{/if}
+						</td>
+					{/if}
 					<td class="num hide-sm">
 						{#if team.pointsRank}{team.pointsRank}/{poule.teams.filter((t) => t.points != null).length}{:else}<span class="muted">–</span>{/if}
 					</td>
@@ -319,7 +329,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 14px;
-		overflow: hidden;
+		overflow-x: auto;
 		margin-bottom: 1.75rem;
 	}
 	table {
@@ -351,6 +361,7 @@
 	}
 	.team {
 		font-weight: 500;
+		overflow-wrap: anywhere;
 	}
 	.code {
 		font-weight: 600;

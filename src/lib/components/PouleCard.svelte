@@ -72,6 +72,9 @@
 				title="Gemiddeld {fmt(poule.stats.avg, 1)} punten · #{poule.stats.rank} van {poule.stats
 					.of} poules in {poule.section}"
 			>
+				{#if poule.avgAge != null}
+					<span class="age" title="Gemiddelde leeftijd van de teams">{fmt(poule.avgAge, 1)} jr</span>
+				{/if}
 				<span class="avg">Ø {fmt(poule.stats.avg)}</span>
 			</div>
 		{/if}
@@ -205,6 +208,11 @@
 		white-space: nowrap;
 		margin-left: auto;
 	}
+	.age {
+		font-size: 0.82rem;
+		color: var(--text-3);
+		font-variant-numeric: tabular-nums;
+	}
 	.avg {
 		font-size: 0.82rem;
 		font-weight: 600;
@@ -306,6 +314,7 @@
 
 	.team button {
 		all: unset;
+		overflow-wrap: anywhere;
 		color: var(--text);
 		font-weight: 500;
 	}

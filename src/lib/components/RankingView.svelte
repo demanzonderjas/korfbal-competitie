@@ -16,6 +16,7 @@
 		app.label;
 		app.kind;
 		app.direction;
+		app.order;
 		limit = PAGE_SIZE;
 	});
 
@@ -37,6 +38,15 @@
 			scope.flatMap((s) => s.poules.flatMap((p) => p.teams.filter((t) => t.points != null))),
 			(t: Team) => t.points!
 		)
+	);
+	// Optional age order for the teams list: youngest or oldest average age first.
+	const rankedByAge = $derived(
+		app.order === 'punten'
+			? rankedTeams
+			: ranked(
+					rankedTeams.map((r) => r.item).filter((t) => t.age != null),
+					(t: Team) => (app.order === 'jong' ? -t.age! : t.age!)
+				)
 	);
 	const rankedPoules = $derived(
 		ranked(
@@ -71,7 +81,7 @@
 		p.teams.some(teamMatches) || words.every((w) => p.code.toLowerCase().includes(w));
 
 	const teams = $derived(
-		rankedTeams.filter(
+		rankedByAge.filter(
 			(r) =>
 				r.item.points! >= min && (!app.label || r.item.label === app.label) && (!words.length || teamMatches(r.item))
 		)
@@ -212,6 +222,15 @@
 		<input type="range" min={lo} max={hi} step="1" value={min} oninput={onSlide} />
 	</label>
 	{#if app.mode === 'teams'}
+		<div class="seg" role="group" aria-label="Volgorde">
+			<button type="button" class:on={app.order === 'punten'} onclick={() => update(() => (app.order = 'punten'))}
+				>Op punten</button
+			>
+			<button type="button" class:on={app.order === 'jong'} onclick={() => update(() => (app.order = 'jong'))}
+				>Jongste</button
+			>
+			<button type="button" class:on={app.order === 'oud'} onclick={() => update(() => (app.order = 'oud'))}>Oudste</button>
+		</div>
 		<div class="seg" role="group" aria-label="Label">
 			<button type="button" class:on={!app.label} onclick={() => update(() => (app.label = null))}>Alle teams</button>
 			<button type="button" class:on={app.label === 'eindbaas'} onclick={() => update(() => (app.label = 'eindbaas'))}
@@ -255,7 +274,8 @@
 
 {#if app.mode === 'teams'}
 	<p class="summary">
-		<strong>{nl(teams.length)}</strong> van {nl(rankedTeams.length)} teams
+		<strong>{nl(teams.length)}</strong> van {nl(rankedTeams.length)} teams{#if app.order !== 'punten'},
+			{app.order === 'jong' ? 'jongste' : 'oudste'} gemiddelde leeftijd eerst{/if}
 		{#if app.label === 'eindbaas'}
 			— {app.rankSection?.labelGaps
 				? `minstens ${app.rankSection.labelGaps.eindbaas} punten meer dan de nummer 2 in hun poule`
@@ -274,7 +294,7 @@
 					<th class="rank">#</th>
 					<th>Team</th>
 					<th>Poule</th>
-					<th class="num hide-sm" title="Gemiddelde leeftijd">Lftd</th>
+					<th class="num" class:hide-sm={app.order === 'punten'} title="Gemiddelde leeftijd">Lftd</th>
 					{#if app.rankSection}
 						<th class="num" title="Plek in de hele {app.rankCategory.name} ({nl(rankedTeamCount.get(app.rankCategory.name) ?? 0)} teams)"
 							>Totaal</th
@@ -297,7 +317,9 @@
 							<button type="button" class="link code" onclick={() => app.openPoule(t.poule.code)}>{t.poule.code}</button>
 							<span class="sub">{t.pointsRank}e van {t.poule.teams.filter((x) => x.points != null).length}{#if !app.rankSection} · {t.poule.section}{/if}</span>
 						</td>
-						<td class="num hide-sm">{t.age != null ? nl(t.age, 1) : ''}</td>
+						<td class="num" class:hide-sm={app.order === 'punten'} class:pts={app.order !== 'punten'}
+							>{t.age != null ? nl(t.age, 1) : ''}</td
+						>
 						{#if app.rankSection}
 							<td class="num muted">#{t.overallRank}</td>
 						{/if}
@@ -324,8 +346,9 @@
 					<th class="rank">#</th>
 					<th>Team</th>
 					<th>Poule</th>
+					<th class="num" title="Gemiddelde leeftijd nu, met de verandering t.o.v. {previousLabel}">Lftd</th>
 					<th class="num hide-sm" title="Punten in {previousLabel}">Veld</th>
-					<th class="num">Nu</th>
+					<th class="num hide-sm">Nu</th>
 					<th class="num">Δ</th>
 				</tr>
 			</thead>
@@ -341,12 +364,18 @@
 						</td>
 						<td>
 							<button type="button" class="link code" onclick={() => app.openPoule(t.poule.code)}>{t.poule.code}</button>
-							<span class="sub" title="{previousLabel}: {prev.section}, {prev.code}"
-								>{prev.section === t.poule.section ? `veld ${prev.code}` : `was ${prev.section}`}</span
+							<span class="sub nowrap" title="{previousLabel}: {prev.section}, {prev.code}"
+								>veld {prev.code}</span
 							>
 						</td>
+						<td class="num" title={prev.age != null ? `${previousLabel}: ${nl(prev.age, 1)} jaar` : ''}>
+							{t.age != null ? nl(t.age, 1) : ''}
+							{#if t.ageDelta != null}
+								<span class="sub age-delta">{t.ageDelta > 0 ? '+' : t.ageDelta < 0 ? '−' : '±'}{nl(Math.abs(t.ageDelta), 1)}</span>
+							{/if}
+						</td>
 						<td class="num hide-sm muted">{prev.points}</td>
-						<td class="num">{t.points}</td>
+						<td class="num hide-sm">{t.points}</td>
 						<td class="num pts" class:up={t.delta! > 0} class:down={t.delta! < 0}
 							>{t.delta! > 0 ? '+' : t.delta! < 0 ? '−' : '±'}{Math.abs(t.delta!)}</td
 						>
@@ -372,6 +401,7 @@
 					<th class="rank">#</th>
 					<th>Poule</th>
 					<th class="bar-col">Sterkte</th>
+					<th class="num hide-sm" title="Gemiddelde leeftijd van de teams">Lftd</th>
 					<th class="num hide-sm" title="Laagste – hoogste punten">Spreiding</th>
 					<th class="num">Ø</th>
 				</tr>
@@ -396,6 +426,7 @@
 								<div class="fill" class:hot={s.tough} style="width: {pct(s.avg)}%"></div>
 							</div>
 						</td>
+						<td class="num hide-sm muted">{p.avgAge != null ? nl(p.avgAge, 1) : ''}</td>
 						<td class="num hide-sm muted">{s.min}–{s.max}</td>
 						<td class="num pts">{nl(s.avg, 1)}</td>
 					</tr>
@@ -462,7 +493,10 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 14px;
-		overflow: hidden;
+		overflow-x: auto;
+	}
+	.nowrap {
+		white-space: nowrap;
 	}
 	table {
 		width: 100%;
@@ -505,6 +539,7 @@
 		font-weight: 500;
 		color: var(--text);
 		cursor: pointer;
+		overflow-wrap: anywhere;
 	}
 	button.name:hover {
 		color: var(--accent-strong);
@@ -550,6 +585,9 @@
 	.tough {
 		background: var(--hot);
 		color: var(--on-hot);
+	}
+	.age-delta {
+		font-variant-numeric: tabular-nums;
 	}
 	.up {
 		color: var(--up);

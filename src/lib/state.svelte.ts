@@ -5,6 +5,7 @@ import { categories, clubByName, normalize, type TeamLabel } from './indeling';
 export type View = 'indeling' | 'clubs' | 'ranglijst';
 export type RankMode = 'teams' | 'poules' | 'trend';
 export type Direction = 'up' | 'down';
+export type TeamOrder = 'punten' | 'jong' | 'oud';
 export type SortMode = 'code' | 'zwaar';
 export type PouleKind = 'zwaar' | 'gelijkwaardig';
 
@@ -39,6 +40,8 @@ class AppState {
 	kind = $state<PouleKind | null>(null);
 	/** Trend mode: biggest risers or fallers since the previous indeling. */
 	direction = $state<Direction>('up');
+	/** Teams mode: order by points, or youngest/oldest average age first. */
+	order = $state<TeamOrder>('punten');
 	sort = $state<SortMode>('code');
 	myClub = $state<string | null>(null);
 
@@ -73,6 +76,7 @@ class AppState {
 				if (this.trimmed) p.set('q', this.trimmed);
 				if (this.mode !== 'teams') p.set('mode', this.mode);
 				if (this.mode === 'teams' && this.label) p.set('label', this.label);
+				if (this.mode === 'teams' && this.order !== 'punten') p.set('volgorde', this.order);
 				if (this.mode === 'poules' && this.kind) p.set('soort', this.kind);
 				if (this.mode === 'trend' && this.direction === 'down') p.set('richting', 'dalers');
 				if (this.min != null) p.set('min', String(this.min));
@@ -100,6 +104,8 @@ class AppState {
 		const mode = p.get('mode');
 		this.mode = mode === 'poules' || mode === 'trend' ? mode : 'teams';
 		this.direction = p.get('richting') === 'dalers' ? 'down' : 'up';
+		const order = p.get('volgorde');
+		this.order = order === 'jong' || order === 'oud' ? order : 'punten';
 		const label = p.get('label');
 		this.label = label === 'eindbaas' || label === 'underdog' ? label : null;
 		const kind = p.get('soort');
@@ -134,6 +140,7 @@ class AppState {
 		this.label = null;
 		this.kind = null;
 		this.direction = 'up';
+		this.order = 'punten';
 		this.sort = 'code';
 	}
 

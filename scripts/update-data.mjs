@@ -168,8 +168,8 @@ function clubLabelKey(name) {
 }
 
 /**
- * Adds a 7th element to every current team tuple: [section, poule, points, name, category] of the same
- * team in the previous indeling (name/category only when they differ), or null when it is new.
+ * Adds a 7th element to every current team tuple: [section, poule, points, name, category, age] of the
+ * same team in the previous indeling (name/category only when they differ), or null when it is new.
  * Teams match on their exact name, preferring the same category; otherwise on club + team label when
  * that is unambiguous (sponsor names change between seasons).
  */
@@ -201,13 +201,14 @@ function matchPrevious(current, previous) {
 	}
 	const link = (item, entry) => {
 		entry.used = true;
-		const [, name, , , points] = entry.team;
+		const [, name, , age, points] = entry.team;
 		item.team[6] = [
 			entry.section,
 			entry.code,
 			points,
 			name === item.team[1] ? null : name,
-			entry.category === item.category ? null : entry.category
+			entry.category === item.category ? null : entry.category,
+			age
 		];
 	};
 
