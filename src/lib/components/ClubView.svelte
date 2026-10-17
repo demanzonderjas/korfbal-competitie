@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { DAYS, rankedTeamCount, teamGroup, type Club, type Poule, type Team } from '../indeling';
+	import { DAYS, previousLabel, rankedTeamCount, teamGroup, type Club, type Poule, type Team } from '../indeling';
 	import { shareLink } from '../share';
 	import { ALL_SECTIONS, app } from '../state.svelte';
 	import PouleCard from './PouleCard.svelte';
@@ -45,8 +45,26 @@
 		underdogs: club.teams.filter((t) => t.team.label === 'underdog').length,
 		tough: club.teams.filter((t) => t.poule.stats?.tough).length,
 		derbies: new Set(club.teams.filter((t) => t.poule.derbies.some((d) => d.includes(t.team))).map((t) => t.poule)).size,
-		ranked: club.teams.some((t) => t.team.overallRank != null)
+		ranked: club.teams.some((t) => t.team.overallRank != null),
+		deltas: club.teams.map((t) => t.team.delta).filter((d) => d != null),
+		newTeams: club.teams.filter((t) => !t.team.previous).length
 	});
+	const avgDelta = $derived(
+		stats.deltas.length ? stats.deltas.reduce((a, b) => a + b, 0) / stats.deltas.length : null
+	);
+
+	const signed = (n: number, decimals = 0) => {
+		const v = n.toLocaleString('nl-NL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+		return n > 0 ? `+${v}` : n < 0 ? v.replace('-', '−') : '±0';
+	};
+
+	function previousTitle(team: Team) {
+		const prev = team.previous;
+		if (!prev) return `Nieuw t.o.v. ${previousLabel}`;
+		const pts = prev.points != null ? `, ${prev.points} punten` : '';
+		const name = prev.name !== team.name ? ` als ${prev.name}` : '';
+		return `${previousLabel}${name}: ${prev.section}, ${prev.code}${pts}`;
+	}
 
 	let copied = $state(false);
 	async function share() {
@@ -116,6 +134,16 @@
 			<strong>{stats.derbies}</strong><span>{stats.derbies === 1 ? 'derby' : "derby's"}</span>
 		</div>
 	{/if}
+	{#if avgDelta != null}
+		<div title="Gemiddelde verandering in punten van {stats.deltas.length} teams t.o.v. {previousLabel}">
+			<strong class:up={avgDelta > 0} class:down={avgDelta < 0}>{signed(avgDelta, 1)}</strong><span>punten t.o.v. veld</span>
+		</div>
+	{/if}
+	{#if stats.newTeams}
+		<div title="Teams die niet in {previousLabel} voorkwamen">
+			<strong>{stats.newTeams}</strong><span>{stats.newTeams === 1 ? 'nieuw team' : 'nieuwe teams'}</span>
+		</div>
+	{/if}
 </div>
 
 {#if categoriesPresent.length > 1 || daysPresent.length > 1}
@@ -147,10 +175,12 @@
 				<th>Poule</th>
 				<th class="hide-sm">Klasse</th>
 				<th>Dag</th>
-				<th class="num" title="Plek op punten binnen de poule (alleen B-categorie)">Pos.</th>
+				<th class="num hide-sm" title="Plek op punten binnen de poule (alleen B-categorie)">Pos.</th>
 				{#if stats.ranked}
 					<th class="num" title="Plek op punten in de hele B-categorie">Rang</th>
 				{/if}
+				<th class="hide-sm" title="Poule in {previousLabel}">Veld</th>
+				<th class="num" title="Verandering in punten t.o.v. {previousLabel}">Δ</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -166,7 +196,7 @@
 					</td>
 					<td class="hide-sm muted">{poule.section}</td>
 					<td><span title={team.day ? DAYS[team.day] : ''}>{team.day ?? '–'}</span></td>
-					<td class="num">
+					<td class="num hide-sm">
 						{#if team.pointsRank}{team.pointsRank}/{poule.teams.filter((t) => t.points != null).length}{:else}<span class="muted">–</span>{/if}
 					</td>
 					{#if stats.ranked}
@@ -174,6 +204,16 @@
 							{#if team.overallRank}#{team.overallRank}{:else}<span class="muted">–</span>{/if}
 						</td>
 					{/if}
+					<td class="hide-sm muted prev" title={previousTitle(team)}>{team.previous?.code ?? '–'}</td>
+					<td class="num" title={previousTitle(team)}>
+						{#if team.delta != null}
+							<span class:up={team.delta > 0} class:down={team.delta < 0}>{signed(team.delta)}</span>
+						{:else if !team.previous}
+							<em class="muted">nieuw</em>
+						{:else}
+							<span class="muted">–</span>
+						{/if}
+					</td>
 				</tr>
 			{/each}
 		</tbody>
@@ -249,6 +289,15 @@
 	}
 	.hot {
 		color: var(--hot);
+	}
+	.up {
+		color: var(--up);
+	}
+	.down {
+		color: var(--down);
+	}
+	.prev {
+		white-space: nowrap;
 	}
 
 	.filters {

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { DAYS, homeClub, rankedTeamCount, type Poule, type Team } from '../indeling';
+	import { DAYS, homeClub, previousLabel, rankedTeamCount, type Poule, type Team } from '../indeling';
 	import { shareLink } from '../share';
 	import { app } from '../state.svelte';
 
@@ -29,9 +29,17 @@
 	}
 
 	function pointsTitle(team: Team) {
-		if (team.overallRank == null) return 'Punten';
-		return `#${team.overallRank} van ${fmt(rankedTeamCount.get(poule.category) ?? 0)} in de hele ${poule.category}`;
+		const lines = [];
+		if (team.overallRank != null) {
+			lines.push(`#${team.overallRank} van ${fmt(rankedTeamCount.get(poule.category) ?? 0)} in de hele ${poule.category}`);
+		}
+		const prev = team.previous;
+		if (!prev) lines.push(`Nieuw t.o.v. ${previousLabel}`);
+		else if (prev.points != null) lines.push(`${previousLabel}: ${prev.points} punten (${prev.section}, ${prev.code})`);
+		return lines.join('\n') || 'Punten';
 	}
+
+	const signed = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '±0');
 
 	const clubNames = (teams: Team[]) => [...new Set(teams.map((t) => homeClub(t).name))].join(' – ');
 
@@ -130,7 +138,14 @@
 					{/if}
 					{#if hasStats}
 						<td class="num">{fmt(team.age, 1)}</td>
-						<td class="num pts" title={pointsTitle(team)}>{fmt(team.points)}</td>
+						<td class="num pts" title={pointsTitle(team)}>
+							{fmt(team.points)}
+							{#if team.delta != null}
+								<span class="delta" class:up={team.delta > 0} class:down={team.delta < 0}>{signed(team.delta)}</span>
+							{:else if !team.previous && team.points != null}
+								<span class="delta new">nieuw</span>
+							{/if}
+						</td>
 					{/if}
 				</tr>
 			{/each}
@@ -343,6 +358,22 @@
 	.pts {
 		font-weight: 600;
 		color: var(--text);
+	}
+	.delta {
+		display: block;
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: var(--text-3);
+	}
+	.delta.up {
+		color: var(--up);
+	}
+	.delta.down {
+		color: var(--down);
+	}
+	.delta.new {
+		font-weight: 500;
+		font-style: italic;
 	}
 	th.num:last-child,
 	td.num:last-child {

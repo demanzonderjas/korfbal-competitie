@@ -62,7 +62,8 @@
 </main>
 
 <footer class="wrap">
-	Bron: <a href={meta.source} rel="noopener" target="_blank">KNKV – {meta.title}</a>, opgehaald op
+	Bron: <a href={meta.source} rel="noopener" target="_blank">KNKV – {meta.title}</a>, vergeleken met
+	<a href={meta.previous.source} rel="noopener" target="_blank">{meta.previous.title}</a>, opgehaald op
 	{new Date(meta.updated).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}.
 	Geen officiële KNKV-app; controleer bij twijfel de bron. Labels als “eindbaas”, “underdog”, “zware poule” en
 	“gelijkwaardig” zijn afgeleid van de indelingspunten.

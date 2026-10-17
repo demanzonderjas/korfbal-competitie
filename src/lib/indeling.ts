@@ -1,10 +1,14 @@
 import raw from './data/indeling.json';
 
-type RawTeam = [number, string, string | null, number | null, number | null, string | null];
+/** The same team in the previous indeling: section, poule, points, and name/category when they differ. */
+type RawPrevious = [string, string, number | null, string | null, string | null];
+type RawTeam = [number, string, string | null, number | null, number | null, string | null, RawPrevious | null];
 type RawData = {
 	title: string;
 	source: string;
+	date: string | null;
 	updated: string;
+	previous: { title: string; source: string; date: string | null };
 	categories: { name: string; sections: { name: string; poules: { code: string; teams: RawTeam[] }[] }[] }[];
 };
 
@@ -39,7 +43,13 @@ export type Team = {
 	pointsRank: number | null;
 	/** Rank by points across the whole category (e.g. all of B-categorie); ties share a rank. */
 	overallRank: number | null;
+	/** The same team in the previous indeling (null when the team is new). */
+	previous: PreviousTeam | null;
+	/** Points now minus points in the previous indeling, when both are known. */
+	delta: number | null;
 };
+
+export type PreviousTeam = { section: string; code: string; points: number | null; name: string; category: string };
 
 export type PouleStats = {
 	avg: number;
@@ -134,7 +144,7 @@ export const categories: Category[] = data.categories.map((c) => ({
 					derbies: [],
 					internal: []
 				};
-				poule.teams = p.teams.map(([nr, name, day, age, points, place]) => ({
+				poule.teams = p.teams.map(([nr, name, day, age, points, place, prev]) => ({
 					nr,
 					name,
 					club: clubName(name),
@@ -147,7 +157,15 @@ export const categories: Category[] = data.categories.map((c) => ({
 					label: null,
 					gap: null,
 					pointsRank: null,
-					overallRank: null
+					overallRank: null,
+					previous: prev && {
+						section: prev[0],
+						code: prev[1],
+						points: prev[2],
+						name: prev[3] ?? name,
+						category: prev[4] ?? c.name
+					},
+					delta: prev && points != null && prev[2] != null ? points - prev[2] : null
 				}));
 				return poule;
 			})
@@ -162,7 +180,16 @@ export const poules: Poule[] = sections.flatMap((s) => s.poules);
 export const teams: Team[] = poules.flatMap((p) => p.teams);
 export const pouleByCode = new Map(poules.map((p) => [p.code.toLowerCase(), p]));
 export const teamCount = teams.length;
-export const meta = { title: data.title, source: data.source, updated: data.updated };
+export const meta = {
+	title: data.title,
+	source: data.source,
+	date: data.date,
+	updated: data.updated,
+	previous: data.previous
+};
+
+/** "Indelingen veld najaar 2026" -> "veld najaar 2026", for "t.o.v. veld najaar 2026". */
+export const previousLabel = data.previous.title.replace(/^indelingen?\s+/i, '');
 
 // Points (B-categorie only): per-team rank and labels, per-poule averages ranked within the section.
 function labelThreshold(gaps: number[]): number {

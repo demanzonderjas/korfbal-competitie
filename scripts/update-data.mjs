@@ -1,17 +1,23 @@
-// Downloads the KNKV "Indelingen zaal" spreadsheet and converts it to the JSON the app bundles.
+// Downloads the KNKV indeling spreadsheets and converts them to the JSON the app bundles.
 //
-//   npm run data:update                  download from SHARE_URL and convert
-//   npm run data:update -- path/to.xlsx  convert a local file instead
+//   npm run data:update                                   download both from SharePoint
+//   npm run data:update -- current.xlsx previous.xlsx     convert local files instead
+//
+// "current" is the indeling the app shows; "previous" is the one before it (the field competition
+// before a zaal season, or the other way around). Every current team is matched to its previous team so
+// the app can show class and points changes.
 //
 // Every sheet has the same shape: a header row with one or more "Poule/Team" blocks side by side,
 // section headings in column A, poule codes in the "Poule/Team" column, and team rows with their
-// number one column to the left of the team name.
+// number one column to the left of the team name. Some headers end with "indeling dd" and a date.
 
 import ExcelJS from 'exceljs';
 import { writeFile, mkdir } from 'node:fs/promises';
 
-const SHARE_URL =
-	'https://knkv.sharepoint.com/:x:/s/KNKVDownloads/IQDMRiYOtZ8dR4aaH8R9bIjuAd7ykl9TqRrWHgJHGHf3WDg';
+const SOURCES = {
+	current: 'https://knkv.sharepoint.com/:x:/s/KNKVDownloads/IQDMRiYOtZ8dR4aaH8R9bIjuAd7ykl9TqRrWHgJHGHf3WDg',
+	previous: 'https://knkv.sharepoint.com/:x:/s/KNKVDownloads/IQA_uxp9sohLSYJms5kiH2y6AXLhc-0WNJws_DVKfXFd_l8'
+};
 const OUT = new URL('../src/lib/data/indeling.json', import.meta.url);
 
 const CATEGORY_LABELS = {
@@ -20,9 +26,10 @@ const CATEGORY_LABELS = {
 	'B-cat': 'B-categorie',
 	'B-cat dames': 'B-categorie dames'
 };
+const TEAM_COLUMNS = ['Poule/Team', 'Dg', 'Lftd', 'Punt', 'Plaats'];
 
 // SharePoint share links only serve the file after a redirect dance that sets a session cookie.
-async function download() {
+async function download(shareUrl) {
 	const cookies = new Map();
 	const fetchWithCookies = async (url) => {
 		for (let i = 0; i < 10; i++) {
@@ -48,8 +55,8 @@ async function download() {
 		throw new Error('Too many redirects');
 	};
 
-	await fetchWithCookies(SHARE_URL);
-	const { res, url } = await fetchWithCookies(`${SHARE_URL}?download=1`);
+	await fetchWithCookies(shareUrl);
+	const { res, url } = await fetchWithCookies(`${shareUrl}?download=1`);
 	if (!res.ok || !res.headers.get('content-type')?.includes('spreadsheet')) {
 		throw new Error(`Download failed: ${res.status} ${res.headers.get('content-type')}`);
 	}
@@ -59,6 +66,7 @@ async function download() {
 
 function cellValue(v) {
 	if (v == null) return null;
+	if (v instanceof Date) return v;
 	if (typeof v === 'object') {
 		if ('result' in v) return cellValue(v.result);
 		if ('richText' in v) return v.richText.map((t) => t.text).join('');
@@ -69,6 +77,7 @@ function cellValue(v) {
 
 function convert(workbook) {
 	const categories = [];
+	let date = null;
 	for (const ws of workbook.worksheets) {
 		const rows = [];
 		ws.eachRow({ includeEmpty: true }, (row, n) => {
@@ -78,12 +87,14 @@ function convert(workbook) {
 		});
 
 		const header = rows[0];
+		const dateCell = header.find((h) => h instanceof Date);
+		if (dateCell) date = dateCell.toISOString().slice(0, 10);
 		const blocks = header
 			.map((h, i) => (h === 'Poule/Team' ? i : -1))
 			.filter((i) => i >= 0)
 			.map((start) => {
 				const cols = [];
-				for (let j = start; header[j] != null; j++) cols.push(header[j]);
+				for (let j = start; TEAM_COLUMNS.includes(header[j]); j++) cols.push(header[j]);
 				return { start, cols };
 			});
 
@@ -126,33 +137,126 @@ function convert(workbook) {
 		category.sections = category.sections.filter((s) => s.poules.length);
 		categories.push(category);
 	}
-	return categories;
+	return { categories, date };
 }
 
-const localPath = process.argv[2];
-const workbook = new ExcelJS.Workbook();
-let fileName;
-if (localPath) {
-	await workbook.xlsx.readFile(localPath);
-	fileName = localPath.split('/').pop();
-} else {
-	const dl = await download();
-	await workbook.xlsx.load(dl.buffer);
-	fileName = dl.fileName;
+async function load(shareUrl, localPath) {
+	const workbook = new ExcelJS.Workbook();
+	let fileName;
+	if (localPath) {
+		await workbook.xlsx.readFile(localPath);
+		fileName = localPath.split('/').pop();
+	} else {
+		const dl = await download(shareUrl);
+		await workbook.xlsx.load(dl.buffer);
+		fileName = dl.fileName;
+	}
+	return { title: fileName.replace(/\.xlsx$/i, ''), source: shareUrl, ...convert(workbook) };
 }
 
-const categories = convert(workbook);
+const normalize = (s) =>
+	s
+		.toLowerCase()
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.replace(/\s+/g, ' ');
+
+/** "Fortuna/Ruitenheer J2" -> "fortuna|j2": club before the first "/" or "_", plus the team label. */
+function clubLabelKey(name) {
+	const i = name.lastIndexOf(' ');
+	return `${normalize(name.slice(0, i).split(/[/_]/)[0].trim())}|${normalize(name.slice(i + 1))}`;
+}
+
+/**
+ * Adds a 7th element to every current team tuple: [section, poule, points, name, category] of the same
+ * team in the previous indeling (name/category only when they differ), or null when it is new.
+ * Teams match on their exact name, preferring the same category; otherwise on club + team label when
+ * that is unambiguous (sponsor names change between seasons).
+ */
+function matchPrevious(current, previous) {
+	const byName = new Map();
+	const byClubLabel = new Map();
+	for (const c of previous.categories) {
+		for (const s of c.sections) {
+			for (const p of s.poules) {
+				for (const t of p.teams) {
+					const entry = { category: c.name, section: s.name, code: p.code, team: t, used: false };
+					const name = normalize(t[1]);
+					byName.set(name, [...(byName.get(name) ?? []), entry]);
+					const key = clubLabelKey(t[1]);
+					byClubLabel.set(key, [...(byClubLabel.get(key) ?? []), entry]);
+				}
+			}
+		}
+	}
+
+	const stats = { exact: 0, club: 0, none: 0 };
+	const pending = [];
+	for (const c of current.categories) {
+		for (const s of c.sections) {
+			for (const p of s.poules) {
+				for (const t of p.teams) pending.push({ category: c.name, team: t });
+			}
+		}
+	}
+	const link = (item, entry) => {
+		entry.used = true;
+		const [, name, , , points] = entry.team;
+		item.team[6] = [
+			entry.section,
+			entry.code,
+			points,
+			name === item.team[1] ? null : name,
+			entry.category === item.category ? null : entry.category
+		];
+	};
+
+	// Exact names first, so the club fallback only sees teams that are left over.
+	for (const item of pending) {
+		const candidates = (byName.get(normalize(item.team[1])) ?? []).filter((e) => !e.used);
+		const entry = candidates.find((e) => e.category === item.category) ?? candidates[0];
+		if (entry) {
+			link(item, entry);
+			stats.exact++;
+		}
+	}
+	for (const item of pending) {
+		if (item.team[6]) continue;
+		const candidates = (byClubLabel.get(clubLabelKey(item.team[1])) ?? []).filter((e) => !e.used);
+		const sameCategory = candidates.filter((e) => e.category === item.category);
+		const options = sameCategory.length ? sameCategory : candidates;
+		if (options.length === 1) {
+			link(item, options[0]);
+			stats.club++;
+		} else {
+			item.team[6] = null;
+			stats.none++;
+		}
+	}
+	return stats;
+}
+
+const [currentPath, previousPath] = process.argv.slice(2);
+const current = await load(SOURCES.current, currentPath);
+const previous = await load(SOURCES.previous, previousPath);
+const stats = matchPrevious(current, previous);
+
 const data = {
-	title: fileName.replace(/\.xlsx$/i, ''),
-	source: SHARE_URL,
+	title: current.title,
+	source: current.source,
+	date: current.date,
 	updated: new Date().toISOString().slice(0, 10),
-	categories
+	previous: { title: previous.title, source: previous.source, date: previous.date },
+	categories: current.categories
 };
 
 await mkdir(new URL('.', OUT), { recursive: true });
 await writeFile(OUT, JSON.stringify(data));
 
-const poules = categories.flatMap((c) => c.sections.flatMap((s) => s.poules));
-console.log(
-	`${data.title}: ${categories.length} categories, ${poules.length} poules, ${poules.reduce((n, p) => n + p.teams.length, 0)} teams`
-);
+for (const d of [current, previous]) {
+	const poules = d.categories.flatMap((c) => c.sections.flatMap((s) => s.poules));
+	console.log(
+		`${d.title}: ${d.categories.length} categories, ${poules.length} poules, ${poules.reduce((n, p) => n + p.teams.length, 0)} teams`
+	);
+}
+console.log(`Matched with previous: ${stats.exact} by name, ${stats.club} by club + label, ${stats.none} new`);

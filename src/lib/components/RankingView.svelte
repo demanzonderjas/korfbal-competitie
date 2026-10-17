@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { clubByName, homeClub, normalize, rankedTeamCount, type Poule, type Team } from '../indeling';
+	import { clubByName, homeClub, normalize, previousLabel, rankedTeamCount, type Poule, type Team } from '../indeling';
 	import { ALL_SECTIONS, app, rankedCategories } from '../state.svelte';
 
 	const PAGE_SIZE = 100;
@@ -15,6 +15,7 @@
 		app.trimmed;
 		app.label;
 		app.kind;
+		app.direction;
 		limit = PAGE_SIZE;
 	});
 
@@ -44,9 +45,19 @@
 		)
 	);
 
-	// The slider spans the values in the current scope.
+	// Point changes since the previous indeling, biggest risers (or fallers) first.
+	const rankedTrend = $derived(
+		ranked(
+			scope.flatMap((s) => s.poules.flatMap((p) => p.teams.filter((t) => t.delta != null))),
+			(t: Team) => (app.direction === 'up' ? t.delta! : -t.delta!)
+		)
+	);
+
+	// The slider spans the values in the current scope (current points; poule averages for poules).
 	const values = $derived(
-		app.mode === 'teams' ? rankedTeams.map((r) => r.item.points!) : rankedPoules.map((r) => r.item.stats!.avg)
+		app.mode === 'poules'
+			? rankedPoules.map((r) => r.item.stats!.avg)
+			: (app.mode === 'trend' ? rankedTrend : rankedTeams).map((r) => r.item.points!)
 	);
 	const lo = $derived(values.length ? Math.floor(Math.min(...values)) : 0);
 	const hi = $derived(values.length ? Math.ceil(Math.max(...values)) : 0);
@@ -74,6 +85,9 @@
 				(!words.length || pouleMatches(r.item))
 		)
 	);
+	const trend = $derived(
+		rankedTrend.filter((r) => r.item.points! >= min && (!words.length || teamMatches(r.item)))
+	);
 	const highlight = $derived(
 		words.length ? new Set(rankedTeams.map((r) => r.item).filter(teamMatches)) : new Set<Team>()
 	);
@@ -93,7 +107,7 @@
 			words.length && { key: 'q', text: `“${app.trimmed}”`, clear: () => (app.query = '') },
 			app.min != null && {
 				key: 'min',
-				text: `${app.mode === 'teams' ? 'Min.' : 'Min. gem.'} ${min} punten`,
+				text: `${app.mode === 'poules' ? 'Min. gem.' : 'Min.'} ${min} punten`,
 				clear: () => (app.min = null)
 			},
 			app.mode === 'teams' &&
@@ -138,7 +152,8 @@
 	<h1>Ranglijst</h1>
 	<p class="intro">
 		Teams en poules in de B-categorie op indelingspunten. Hoe hoger, hoe sterker. Punten zijn per klasse
-		het best te vergelijken.
+		het best te vergelijken. Bij <em>Stijgers & dalers</em> zie je wie het meest veranderd is t.o.v.
+		{previousLabel}.
 	</p>
 </div>
 
@@ -185,12 +200,15 @@
 		<button type="button" class:on={app.mode === 'poules'} onclick={() => app.go(() => ((app.mode = 'poules'), (app.min = null)))}
 			>Zwaarste poules</button
 		>
+		<button type="button" class:on={app.mode === 'trend'} onclick={() => app.go(() => ((app.mode = 'trend'), (app.min = null)))}
+			>Stijgers & dalers</button
+		>
 	</div>
 </div>
 
 <div class="controls">
 	<label class="slider">
-		<span>{app.mode === 'teams' ? 'Min. punten' : 'Min. gemiddelde'} <strong>{min}</strong></span>
+		<span>{app.mode === 'poules' ? 'Min. gemiddelde' : 'Min. punten'} <strong>{min}</strong></span>
 		<input type="range" min={lo} max={hi} step="1" value={min} oninput={onSlide} />
 	</label>
 	{#if app.mode === 'teams'}
@@ -201,6 +219,15 @@
 			>
 			<button type="button" class:on={app.label === 'underdog'} onclick={() => update(() => (app.label = 'underdog'))}
 				>Underdogs</button
+			>
+		</div>
+	{:else if app.mode === 'trend'}
+		<div class="seg" role="group" aria-label="Richting">
+			<button type="button" class:on={app.direction === 'up'} onclick={() => update(() => (app.direction = 'up'))}
+				>Stijgers</button
+			>
+			<button type="button" class:on={app.direction === 'down'} onclick={() => update(() => (app.direction = 'down'))}
+				>Dalers</button
 			>
 		</div>
 	{:else}
@@ -283,6 +310,54 @@
 	{#if teams.length > limit}
 		<button type="button" class="btn more" onclick={() => (limit += PAGE_SIZE)}>
 			Toon meer ({nl(teams.length - limit)} resterend)
+		</button>
+	{/if}
+{:else if app.mode === 'trend'}
+	<p class="summary">
+		<strong>{nl(trend.length)}</strong> van {nl(rankedTrend.length)} teams, gesorteerd op
+		{app.direction === 'up' ? 'stijging' : 'daling'} in punten t.o.v. {previousLabel}.
+	</p>
+	<div class="table">
+		<table>
+			<thead>
+				<tr>
+					<th class="rank">#</th>
+					<th>Team</th>
+					<th>Poule</th>
+					<th class="num hide-sm" title="Punten in {previousLabel}">Veld</th>
+					<th class="num">Nu</th>
+					<th class="num">Δ</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each trend.slice(0, limit) as { item: t, rank } (t)}
+					{@const club = homeClub(t).name}
+					{@const prev = t.previous!}
+					<tr class:mine={!words.length && myTeams.has(t)}>
+						<td class="rank">{rank}</td>
+						<td>
+							<button type="button" class="name" onclick={() => app.openClub(club)}>{t.name}</button>
+							<span class="sub">{t.place ?? ''}</span>
+						</td>
+						<td>
+							<button type="button" class="link code" onclick={() => app.openPoule(t.poule.code)}>{t.poule.code}</button>
+							<span class="sub" title="{previousLabel}: {prev.section}, {prev.code}"
+								>{prev.section === t.poule.section ? `veld ${prev.code}` : `was ${prev.section}`}</span
+							>
+						</td>
+						<td class="num hide-sm muted">{prev.points}</td>
+						<td class="num">{t.points}</td>
+						<td class="num pts" class:up={t.delta! > 0} class:down={t.delta! < 0}
+							>{t.delta! > 0 ? '+' : t.delta! < 0 ? '−' : '±'}{Math.abs(t.delta!)}</td
+						>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+	{#if trend.length > limit}
+		<button type="button" class="btn more" onclick={() => (limit += PAGE_SIZE)}>
+			Toon meer ({nl(trend.length - limit)} resterend)
 		</button>
 	{/if}
 {:else}
@@ -475,6 +550,12 @@
 	.tough {
 		background: var(--hot);
 		color: var(--on-hot);
+	}
+	.up {
+		color: var(--up);
+	}
+	.down {
+		color: var(--down);
 	}
 	.tough.tight {
 		background: var(--tight);

@@ -3,7 +3,8 @@ import { pushState, replaceState } from '$app/navigation';
 import { categories, clubByName, normalize, type TeamLabel } from './indeling';
 
 export type View = 'indeling' | 'clubs' | 'ranglijst';
-export type RankMode = 'teams' | 'poules';
+export type RankMode = 'teams' | 'poules' | 'trend';
+export type Direction = 'up' | 'down';
 export type SortMode = 'code' | 'zwaar';
 export type PouleKind = 'zwaar' | 'gelijkwaardig';
 
@@ -36,6 +37,8 @@ class AppState {
 	/** Ranking filters: only eindbazen/underdogs (teams), or only tough/even poules (poules). */
 	label = $state<TeamLabel | null>(null);
 	kind = $state<PouleKind | null>(null);
+	/** Trend mode: biggest risers or fallers since the previous indeling. */
+	direction = $state<Direction>('up');
 	sort = $state<SortMode>('code');
 	myClub = $state<string | null>(null);
 
@@ -71,6 +74,7 @@ class AppState {
 				if (this.mode !== 'teams') p.set('mode', this.mode);
 				if (this.mode === 'teams' && this.label) p.set('label', this.label);
 				if (this.mode === 'poules' && this.kind) p.set('soort', this.kind);
+				if (this.mode === 'trend' && this.direction === 'down') p.set('richting', 'dalers');
 				if (this.min != null) p.set('min', String(this.min));
 			}
 			if (this.view === 'indeling' && this.sort !== 'code') p.set('sort', this.sort);
@@ -93,7 +97,9 @@ class AppState {
 				: (c?.sections.find((s) => slug(s.name) === p.get('sectie'))?.name ?? null);
 		this.poule = p.get('poule');
 		this.club = p.get('club');
-		this.mode = p.get('mode') === 'poules' ? 'poules' : 'teams';
+		const mode = p.get('mode');
+		this.mode = mode === 'poules' || mode === 'trend' ? mode : 'teams';
+		this.direction = p.get('richting') === 'dalers' ? 'down' : 'up';
 		const label = p.get('label');
 		this.label = label === 'eindbaas' || label === 'underdog' ? label : null;
 		const kind = p.get('soort');
@@ -127,6 +133,7 @@ class AppState {
 		this.min = null;
 		this.label = null;
 		this.kind = null;
+		this.direction = 'up';
 		this.sort = 'code';
 	}
 
