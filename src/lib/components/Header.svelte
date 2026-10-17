@@ -56,12 +56,16 @@
 				}}
 			>
 				<svg viewBox="0 0 32 32" aria-hidden="true"
-					><circle cx="16" cy="16" r="14" fill="var(--accent)" /><path
-						d="M4.5 12.5h23M4.5 19.5h23M16 2v28M9 4.5c3 6 3 17 0 23M23 4.5c-3 6-3 17 0 23"
-						stroke="var(--on-accent)"
-						stroke-width="1.6"
-						fill="none"
-					/></svg
+					><rect width="32" height="32" rx="7" fill="var(--accent)" /><g fill="var(--on-accent)"
+						><circle cx="9" cy="4.8" r="2.5" /><path d="M8 10v5.5a6.5 2.4 0 0 0 13 0V10z" /><ellipse
+							cx="14.5"
+							cy="10"
+							rx="6.5"
+							ry="2.4"
+						/><ellipse cx="14.5" cy="10" rx="4.6" ry="1.3" fill="var(--accent)" /><path
+							d="M20.5 10.5H24v3h-3.5z"
+						/><rect x="23" y="8" width="3" height="21" rx="1.5" /></g
+					></svg
 				>
 				<span><strong>Korfbal indelingen</strong> <small>{meta.title}</small></span>
 			</a>
