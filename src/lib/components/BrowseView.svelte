@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { categories, clubByName, poules, teamCount } from '../indeling';
+	import { categories, poules, teamCount } from '../indeling';
 	import { app } from '../state.svelte';
 	import PouleCard from './PouleCard.svelte';
 
@@ -12,7 +12,6 @@
 		if (app.sort !== 'zwaar' || !activeSection.hasStats) return activeSection.poules;
 		return [...activeSection.poules].sort((a, b) => (b.stats?.avg ?? -1) - (a.stats?.avg ?? -1));
 	});
-	const myClub = $derived(app.myClub ? (clubByName.get(app.myClub.toLowerCase()) ?? null) : null);
 </script>
 
 {#if activeSection && activeCategory}
@@ -41,20 +40,7 @@
 	</div>
 {:else}
 	{#if !activeCategory}
-		{#if myClub}
-			<button type="button" class="mine" onclick={() => app.openClub(myClub.name)}>
-				<span class="star" aria-hidden="true">★</span>
-				<span>
-					<strong>{myClub.name}</strong>
-					<small>Mijn club · {myClub.teams.length} teams — bekijk alle poules</small>
-				</span>
-				<span aria-hidden="true" class="arrow">→</span>
-			</button>
-		{/if}
-		<p class="intro">
-			{nl(teamCount)} teams in {nl(poules.length)} poules. Zoek hierboven, kies een klasse of
-			<button type="button" class="link" onclick={() => app.openView('clubs')}>kies je club</button>.
-		</p>
+		<p class="intro">{nl(teamCount)} teams in {nl(poules.length)} poules. Kies een klasse om alle poules te zien.</p>
 	{/if}
 	{#each activeCategory ? [activeCategory] : categories as c (c.name)}
 		<section class="category">
@@ -84,32 +70,4 @@
 		margin: 0 0 0.7rem;
 	}
 
-	.mine {
-		display: flex;
-		align-items: center;
-		gap: 0.8rem;
-		width: 100%;
-		text-align: left;
-		font: inherit;
-		color: var(--text);
-		background: var(--hit);
-		border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
-		border-radius: 14px;
-		padding: 0.85rem 1rem;
-		margin-bottom: 1rem;
-		cursor: pointer;
-	}
-	.mine small {
-		display: block;
-		color: var(--text-2);
-	}
-	.star {
-		font-size: 1.4rem;
-		color: var(--accent);
-	}
-	.arrow {
-		margin-left: auto;
-		color: var(--accent-strong);
-		font-size: 1.2rem;
-	}
 </style>

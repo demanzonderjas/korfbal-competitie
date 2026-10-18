@@ -23,11 +23,11 @@ export const rankedCategories = categories.filter((c) => c.sections.some((s) => 
 
 /**
  * All view state lives here and is mirrored in the URL, so every screen can be shared or bookmarked.
- * What is shown is decided in order: ?poule, ?club, ?q, then ?v (indeling / clubs / ranglijst).
+ * What is shown is decided in order: ?poule, ?club, ?q, then ?v (clubs, the default / indeling / ranglijst).
  * In the ranking, ?q filters the list instead of opening search results.
  */
 class AppState {
-	view = $state<View>('indeling');
+	view = $state<View>('clubs');
 	query = $state('');
 	category = $state<string | null>(null);
 	section = $state<string | null>(null);
@@ -68,8 +68,8 @@ class AppState {
 		else if (this.trimmed && this.view !== 'ranglijst') {
 			p.set('q', this.trimmed);
 			if (this.category) p.set('cat', slug(this.category));
-		} else {
-			if (this.view !== 'indeling') p.set('v', this.view);
+		} else if (this.view !== 'clubs') {
+			p.set('v', this.view);
 			if (this.category) p.set('cat', slug(this.category));
 			if (this.section) p.set('sectie', slug(this.section));
 			if (this.view === 'ranglijst') {
@@ -91,8 +91,10 @@ class AppState {
 		const p = new URLSearchParams(location.search);
 		const q = p.get('q') ?? '';
 		if (q !== this.trimmed) this.query = q;
+		// Clubs is the start page. Links from before that change opened a class without ?v.
 		const v = p.get('v');
-		this.view = v === 'clubs' || v === 'ranglijst' ? v : 'indeling';
+		const legacyIndeling = !v && !p.has('q') && (p.has('cat') || p.has('sectie') || p.has('sort'));
+		this.view = v === 'indeling' || v === 'ranglijst' ? v : legacyIndeling ? 'indeling' : 'clubs';
 		const c = categoryBySlug.get(p.get('cat') ?? '');
 		this.category = c?.name ?? null;
 		this.section =

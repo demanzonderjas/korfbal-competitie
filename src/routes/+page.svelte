@@ -19,8 +19,8 @@
 				? app.club
 				: app.trimmed
 					? app.trimmed
-					: app.view === 'clubs'
-						? 'Clubs'
+					: app.view === 'indeling'
+						? 'Indeling'
 						: app.view === 'ranglijst'
 							? 'Ranglijst'
 							: null

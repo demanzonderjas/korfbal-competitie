@@ -8,7 +8,7 @@ JSON, so there is no database or API.
 
 - **Search** for a team, club, place or poule code. Poules with matching teams come in team order (club, then 1, 2, 3, …, then youth).
 - **Indeling:** browse by category and class. B-categorie classes can be sorted with the toughest poules first.
-- **Clubs:** pick a club to see all its teams, seniors first (1, 2, 3, …), then midweek, youth and G-korfbal. Each team shows its poule, its position in the poule and its rank in the whole B-categorie. Filter by category or day, share or print the page, and star it as *Mijn club*.
+- **Clubs** (the start page): pick a club to see all its teams, seniors first (1, 2, 3, …), then midweek, youth and G-korfbal. Each team shows its poule, its position in the poule and its rank in the whole B-categorie. Filter by category or day, share or print the page, and star it as *Mijn club*.
 - **Ranglijst:** B-categorie teams ranked by indelingspunten (per class or all of them), and poules ranked by average points.
   - The search box filters the list by team, club or place.
   - Filters: minimum points, eindbazen/underdogs, zware/gelijkwaardige poules. Active filters show as chips, each removable on its own.

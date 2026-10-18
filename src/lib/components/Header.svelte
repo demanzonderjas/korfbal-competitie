@@ -5,8 +5,8 @@
 	let input = $state<HTMLInputElement>();
 
 	const tabs: { view: View; label: string }[] = [
-		{ view: 'indeling', label: 'Indeling' },
 		{ view: 'clubs', label: 'Clubs' },
+		{ view: 'indeling', label: 'Indeling' },
 		{ view: 'ranglijst', label: 'Ranglijst' }
 	];
 
@@ -52,7 +52,7 @@
 				href="/"
 				onclick={(e) => {
 					e.preventDefault();
-					app.openView('indeling');
+					app.openView('clubs');
 				}}
 			>
 				<svg viewBox="0 0 32 32" aria-hidden="true"
